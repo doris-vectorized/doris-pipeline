@@ -69,6 +69,8 @@ public:
 
     void add_block(Block* block, int sender_id, bool use_move);
 
+    bool has_data(size_t n);
+
     Status get_next(Block* block, bool* eos);
 
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
@@ -151,6 +153,8 @@ public:
     SenderQueue(VDataStreamRecvr* parent_recvr, int num_senders, RuntimeProfile* profile);
 
     ~SenderQueue();
+
+    bool should_wait();
 
     Status get_batch(Block** next_block);
 

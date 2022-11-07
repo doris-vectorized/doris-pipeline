@@ -63,6 +63,7 @@ public:
     ~BufferControlBlock();
 
     Status init();
+    bool can_sink(); // 只有一个fragment写入，因此can_sink返回true，则一定可以执行sink
     Status add_batch(std::unique_ptr<TFetchDataResult>& result);
 
     // get result from batch, use timeout?

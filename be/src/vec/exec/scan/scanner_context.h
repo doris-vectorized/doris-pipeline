@@ -75,7 +75,7 @@ public:
     // Get next block from blocks queue. Called by ScanNode
     // Set eos to true if there is no more data to read.
     // And if eos is true, the block returned must be nullptr.
-    Status get_block_from_queue(vectorized::Block** block, bool* eos);
+    Status get_block_from_queue(vectorized::Block** block, bool* eos, bool wait = true);
 
     // When a scanner complete a scan, this method will be called
     // to return the scanner to the list for next scheduling.
@@ -115,6 +115,8 @@ public:
 
     void clear_and_join();
 
+    bool can_finish();
+
     std::string debug_string();
 
     RuntimeState* state() { return _state; }
@@ -125,6 +127,8 @@ public:
     VScanNode* parent() { return _parent; }
 
     OpentelemetrySpan scan_span() { return _scan_span; }
+
+    bool empty_in_queue();
 
 public:
     // the unique id of this context

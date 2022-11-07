@@ -23,11 +23,15 @@
 #include "vec/common/sort/vsort_exec_exprs.h"
 
 namespace doris {
+namespace pipeline {
+class ExchangeSourceOperator;
+}
 namespace vectorized {
 class VDataStreamRecvr;
 
 class VExchangeNode : public ExecNode {
 public:
+    friend class doris::pipeline::ExchangeSourceOperator;
     VExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     virtual ~VExchangeNode() {}
 
@@ -40,6 +44,9 @@ public:
 
     // Status collect_query_statistics(QueryStatistics* statistics) override;
     void set_num_senders(int num_senders) { _num_senders = num_senders; }
+
+    Status constr_pipeline(pipeline::PipelineFragmentContext* fragment_context,
+                           pipeline::Pipeline* current_pipeline) override;
 
 private:
     int _num_senders;

@@ -65,6 +65,7 @@ Status VScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(_register_runtime_filter());
+    RETURN_IF_ERROR(_init_profile());
 
     return Status::OK();
 }
@@ -72,8 +73,6 @@ Status VScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 Status VScanNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     SCOPED_CONSUME_MEM_TRACKER(mem_tracker());
-
-    RETURN_IF_ERROR(_init_profile());
 
     // init profile for runtime filter
     for (auto& rf_ctx : _runtime_filter_ctxs) {
@@ -201,7 +200,7 @@ Status VScanNode::_register_runtime_filter() {
     return Status::OK();
 }
 
-Status VScanNode::_acquire_runtime_filter() {
+Status VScanNode::_acquire_runtime_filter(bool wait) {
     SCOPED_TIMER(_acquire_runtime_filter_timer);
     std::vector<VExpr*> vexprs;
     for (size_t i = 0; i < _runtime_filter_descs.size(); ++i) {
@@ -214,7 +213,7 @@ Status VScanNode::_acquire_runtime_filter() {
             }
         }
         bool ready = runtime_filter->is_ready();
-        if (!ready) {
+        if (!ready && wait) {
             ready = runtime_filter->await();
         }
         if (ready) {

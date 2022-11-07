@@ -95,6 +95,12 @@ Status BufferControlBlock::init() {
     return Status::OK();
 }
 
+bool BufferControlBlock::can_sink() {
+    std::unique_lock<std::mutex> l(_lock);
+    return _batch_queue.empty() || _buffer_rows < _buffer_limit || _is_cancelled;
+    //    return !((!_batch_queue.empty() && (_buffer_rows) > _buffer_limit) && !_is_cancelled);
+}
+
 Status BufferControlBlock::add_batch(std::unique_ptr<TFetchDataResult>& result) {
     std::unique_lock<std::mutex> l(_lock);
 
@@ -104,7 +110,7 @@ Status BufferControlBlock::add_batch(std::unique_ptr<TFetchDataResult>& result) 
 
     int num_rows = result->result_batch.rows.size();
 
-    while ((!_batch_queue.empty() && (num_rows + _buffer_rows) > _buffer_limit) && !_is_cancelled) {
+    while ((!_batch_queue.empty() && _buffer_rows > _buffer_limit) && !_is_cancelled) {
         _data_removal.wait(l);
     }
 
