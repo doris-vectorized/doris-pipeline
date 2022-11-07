@@ -19,6 +19,9 @@
 
 #include "olap/storage_engine.h"
 #include "olap/tablet.h"
+#include "pipeline/exec/olap_scan_operator.h"
+#include "pipeline/pipeline.h"
+#include "pipeline/pipeline_fragment_context.h"
 #include "util/to_string.h"
 #include "vec/columns/column_const.h"
 #include "vec/exec/scan/new_olap_scanner.h"
@@ -42,7 +45,7 @@ Status NewOlapScanNode::prepare(RuntimeState* state) {
 }
 
 Status NewOlapScanNode::_init_profile() {
-    VScanNode::_init_profile();
+    RETURN_IF_ERROR(VScanNode::_init_profile());
 
     _num_disks_accessed_counter = ADD_COUNTER(_runtime_profile, "NumDiskAccess", TUnit::UNIT);
     _tablet_counter = ADD_COUNTER(_runtime_profile, "TabletNum", TUnit::UNIT);
@@ -344,6 +347,21 @@ bool NewOlapScanNode::_is_key_column(const std::string& key_name) {
     auto res = std::find(_olap_scan_node.key_column_name.begin(),
                          _olap_scan_node.key_column_name.end(), key_name);
     return res != _olap_scan_node.key_column_name.end();
+}
+
+Status NewOlapScanNode::constr_pipeline(pipeline::PipelineFragmentContext* fragment_context,
+                                        pipeline::Pipeline* current_pipeline) {
+    // 创建 olap scan operator，将scan range传给它。
+
+    // Starrocks中加了一个OlapScanPrepareOperatorFactory和NoopSinkOperatorFactory的pipeline
+    // OlapScanPrepareOperatorFactory和OlapScanOperatorFactory之间靠OlapScanContextFactoryPtr联系在一起
+    // OlapScanPrepareOperator和OlapScanOperator共享OlapScanContex只是为了使用OlapScanContex的标注依赖和管理声明周期的作用
+    // OlapScanPrepareOperator主要用来做open tablet
+    // 但中间还有一个NoopSinkOperatorFactory算子，可能是为了适配pipeline的调度而生成的
+    pipeline::OperatorTemplatePtr operator_t = std::make_shared<pipeline::OlapScanOperatorTemplate>(
+            fragment_context->next_operator_template_id(), "OlapScanOperatorTemplate", this);
+    current_pipeline->set_source(operator_t);
+    return Status::OK();
 }
 
 }; // namespace doris::vectorized

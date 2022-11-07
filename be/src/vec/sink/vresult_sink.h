@@ -29,11 +29,15 @@ class ExprContext;
 class ResultWriter;
 class MemTracker;
 struct ResultFileOptions;
+namespace pipeline {
+class ResultSinkOperator;
+}
 namespace vectorized {
 class VExprContext;
 
 class VResultSink : public DataSink {
 public:
+    friend class pipeline::ResultSinkOperator;
     VResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& select_exprs,
                 const TResultSink& sink, int buffer_size);
 

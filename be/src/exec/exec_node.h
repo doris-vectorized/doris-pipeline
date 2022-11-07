@@ -52,6 +52,12 @@ class Block;
 class VExpr;
 } // namespace vectorized
 
+namespace pipeline {
+class PipelineFragmentContext;
+class Pipeline;
+class Operator;
+} // namespace pipeline
+
 using std::string;
 using std::stringstream;
 using std::vector;
@@ -205,8 +211,15 @@ public:
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
 
+    // 生成Operator，添加到current_pipeline中。
+    virtual Status constr_pipeline(pipeline::PipelineFragmentContext*, pipeline::Pipeline*) {
+        return Status::NotSupported("Not support pipeline for type {},{} ", _type,
+                                    typeid(*this).name());
+    }
+
 protected:
     friend class DataSink;
+    friend class doris::pipeline::Operator;
 
     /// Initialize 'buffer_pool_client_' and claim the initial reservation for this
     /// ExecNode. Only needs to be called by ExecNodes that will use the client.

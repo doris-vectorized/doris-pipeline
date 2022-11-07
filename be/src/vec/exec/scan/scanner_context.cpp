@@ -108,7 +108,12 @@ void ScannerContext::append_blocks_to_queue(const std::vector<vectorized::Block*
     _blocks_queue_added_cv.notify_one();
 }
 
-Status ScannerContext::get_block_from_queue(vectorized::Block** block, bool* eos) {
+bool ScannerContext::empty_in_queue() {
+    std::unique_lock<std::mutex> l(_transfer_lock);
+    return blocks_queue.empty();
+}
+
+Status ScannerContext::get_block_from_queue(vectorized::Block** block, bool* eos, bool wait) {
     std::unique_lock<std::mutex> l(_transfer_lock);
     // Normally, the scanner scheduler will schedule ctx.
     // But when the amount of data in the blocks queue exceeds the upper limit,
@@ -121,7 +126,7 @@ Status ScannerContext::get_block_from_queue(vectorized::Block** block, bool* eos
         _state->exec_env()->scanner_scheduler()->submit(this);
     }
     // Wait for block from queue
-    while (_process_status.ok() && !_is_finished && blocks_queue.empty()) {
+    while (_process_status.ok() && !_is_finished && blocks_queue.empty() && wait) {
         if (_state->is_cancelled()) {
             _process_status = Status::Cancelled("cancelled");
             break;
@@ -191,6 +196,11 @@ void ScannerContext::clear_and_join() {
                   std::default_delete<vectorized::Block>());
 
     return;
+}
+
+bool ScannerContext::can_finish() {
+    std::unique_lock<std::mutex> l(_transfer_lock);
+    return _num_running_scanners == 0 && _num_scheduling_ctx == 0;
 }
 
 std::string ScannerContext::debug_string() {

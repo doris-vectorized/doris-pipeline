@@ -867,6 +867,8 @@ CONF_Bool(hide_webserver_config_page, "false");
 
 CONF_String(jvm_max_heap_size, "1024M");
 
+CONF_Int32(pipeline_task_size, "2");
+
 #ifdef BE_TEST
 // test s3
 CONF_String(test_s3_resource, "resource");

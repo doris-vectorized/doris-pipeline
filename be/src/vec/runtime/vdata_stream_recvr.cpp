@@ -38,6 +38,11 @@ VDataStreamRecvr::SenderQueue::SenderQueue(VDataStreamRecvr* parent_recvr, int n
 
 VDataStreamRecvr::SenderQueue::~SenderQueue() = default;
 
+bool VDataStreamRecvr::SenderQueue::should_wait() {
+    std::unique_lock<std::mutex> l(_lock);
+    return !_is_cancelled && _block_queue.empty() && _num_remaining_senders > 0;
+}
+
 Status VDataStreamRecvr::SenderQueue::get_batch(Block** next_block) {
     std::unique_lock<std::mutex> l(_lock);
     // wait until something shows up or we know we're done
@@ -332,6 +337,10 @@ void VDataStreamRecvr::add_block(Block* block, int sender_id, bool use_move) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     int use_sender_id = _is_merging ? sender_id : 0;
     _sender_queues[use_sender_id]->add_block(block, use_move);
+}
+
+bool VDataStreamRecvr::has_data(size_t n) {
+    return !_sender_queues[n]->should_wait();
 }
 
 Status VDataStreamRecvr::get_next(Block* block, bool* eos) {

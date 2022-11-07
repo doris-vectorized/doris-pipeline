@@ -42,6 +42,10 @@ class IOBufAsZeroCopyInputStream;
 
 namespace doris {
 
+namespace pipeline {
+class PipelineFragmentContext;
+}
+
 class QueryFragmentsCtx;
 class ExecEnv;
 class FragmentExecState;
@@ -65,6 +69,11 @@ public:
 
     // execute one plan fragment
     Status exec_plan_fragment(const TExecPlanFragmentParams& params);
+
+    Status exec_pipeline(const TExecPlanFragmentParams& params);
+
+    void remove_pipeline_context(
+            std::shared_ptr<pipeline::PipelineFragmentContext> pipeline_context);
 
     // TODO(zc): report this is over
     Status exec_plan_fragment(const TExecPlanFragmentParams& params, FinishCallback cb);
@@ -116,6 +125,9 @@ private:
 
     // Make sure that remove this before no data reference FragmentExecState
     std::unordered_map<TUniqueId, std::shared_ptr<FragmentExecState>> _fragment_map;
+
+    std::unordered_map<TUniqueId, std::shared_ptr<pipeline::PipelineFragmentContext>> _pipeline_map;
+
     // query id -> QueryFragmentsCtx
     std::unordered_map<TUniqueId, std::shared_ptr<QueryFragmentsCtx>> _fragments_ctx_map;
     std::unordered_map<TUniqueId, std::unordered_map<int, int64_t>> _bf_size_map;
