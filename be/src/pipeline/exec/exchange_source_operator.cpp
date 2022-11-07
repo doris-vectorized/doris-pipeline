@@ -23,8 +23,8 @@
 
 namespace doris::pipeline {
 
-ExchangeSourceOperator::ExchangeSourceOperator(OperatorBuilder* operator_template)
-        : Operator(operator_template) {}
+ExchangeSourceOperator::ExchangeSourceOperator(OperatorBuilder* operator_builder)
+        : Operator(operator_builder) {}
 
 Status ExchangeSourceOperator::init(ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
@@ -38,7 +38,7 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
 }
 
 Status ExchangeSourceOperator::open(RuntimeState* state) {
-    return _exchange_node->open(state);
+    return _exchange_node->alloc_resource(state);
 }
 
 bool ExchangeSourceOperator::can_read() {

@@ -22,8 +22,8 @@
 
 namespace doris::pipeline {
 
-ScanOperator::ScanOperator(OperatorBuilder* operator_template, vectorized::VScanNode* scan_node)
-        : Operator(operator_template), _scan_node(scan_node) {}
+ScanOperator::ScanOperator(OperatorBuilder* operator_builder, vectorized::VScanNode* scan_node)
+        : Operator(operator_builder), _scan_node(scan_node) {}
 
 Status ScanOperator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::open(state));

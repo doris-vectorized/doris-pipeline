@@ -24,7 +24,7 @@
 #include "gen_cpp/PaloInternalService_types.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "pipeline/exec/sink_buffer.h"
+#include "pipeline/exec/exchange_sink_buffer.h"
 #include "runtime/descriptors.h"
 #include "service/backend_options.h"
 #include "util/ref_count_closure.h"
@@ -84,13 +84,13 @@ public:
 
     Status serialize_block(Block* src, PBlock* dest, int num_receivers = 1);
 
-    void registe_channels(pipeline::SinkBuffer* buffer);
+    void registe_channels(pipeline::ExchangeSinkBuffer* buffer);
 
     bool channel_all_can_write();
 
 protected:
     friend class Channel;
-    friend class pipeline::SinkBuffer;
+    friend class pipeline::ExchangeSinkBuffer;
 
     void _roll_pb_block();
 
@@ -173,7 +173,7 @@ protected:
 class Channel {
 public:
     friend class VDataStreamSender;
-    friend class pipeline::SinkBuffer;
+    friend class pipeline::ExchangeSinkBuffer;
     // Create channel to send data to particular ipaddress/port/query/node
     // combination. buffer_size is specified in bytes and a soft limit on
     // how much tuple data is getting accumulated before being sent; it only applies
@@ -403,7 +403,7 @@ public:
         return Status::OK();
     }
 
-    void registe(pipeline::SinkBuffer* buffer) {
+    void registe(pipeline::ExchangeSinkBuffer* buffer) {
         _buffer = buffer;
         _buffer->register_sink(_fragment_instance_id);
     }
@@ -411,7 +411,7 @@ public:
 private:
     friend class VDataStreamSender;
 
-    pipeline::SinkBuffer* _buffer = nullptr;
+    pipeline::ExchangeSinkBuffer* _buffer = nullptr;
     bool _eos_send = false;
 };
 

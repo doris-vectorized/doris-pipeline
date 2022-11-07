@@ -62,8 +62,11 @@ Status PreAggSourceOperator::get_block(RuntimeState* state, vectorized::Block* b
 }
 
 Status PreAggSourceOperator::close(RuntimeState* state) {
+    if (is_closed()) {
+        return Status::OK();
+    }
     _agg_node->release_resource(state);
-    return Status::OK();
+    return Operator::close(state);
 }
 
 ///////////////////////////////  operator template  ////////////////////////////////

@@ -25,9 +25,9 @@ SortSourceOperatorBuilder::SortSourceOperatorBuilder(int32_t id, const string& n
                                                      vectorized::VSortNode* sort_node)
         : OperatorBuilder(id, name, sort_node), _sort_node(sort_node) {}
 
-SortSourceOperator::SortSourceOperator(SortSourceOperatorBuilder* operator_template,
+SortSourceOperator::SortSourceOperator(SortSourceOperatorBuilder* operator_builder,
                                        vectorized::VSortNode* sort_node)
-        : Operator(operator_template), _sort_node(sort_node) {}
+        : Operator(operator_builder), _sort_node(sort_node) {}
 
 Status SortSourceOperator::init(doris::ExecNode* node, doris::RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(node, state));
@@ -35,6 +35,7 @@ Status SortSourceOperator::init(doris::ExecNode* node, doris::RuntimeState* stat
 }
 
 Status SortSourceOperator::open(doris::RuntimeState* state) {
+    RETURN_IF_ERROR(_sort_node->alloc_resource(state));
     RETURN_IF_ERROR(Operator::open(state));
     return Status::OK();
 }
@@ -44,7 +45,7 @@ Status SortSourceOperator::close(doris::RuntimeState* state) {
         return Status::OK();
     }
     _sort_node->release_resource(state);
-    return Status::OK();
+    return Operator::close(state);
 }
 
 bool SortSourceOperator::can_read() {

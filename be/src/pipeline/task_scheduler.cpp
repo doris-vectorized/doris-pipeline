@@ -34,8 +34,9 @@ Status BlockedTaskScheduler::start() {
 }
 
 void BlockedTaskScheduler::shutdown() {
-    if (!this->_shutdown.load()) {
-        this->_shutdown.store(true);
+    LOG(INFO) << "Start shutdown BlockedTaskScheduler";
+    if (!this->_shutdown) {
+        this->_shutdown = true;
         if (_thread) {
             _task_cond.notify_one();
             _thread->join();
@@ -53,7 +54,7 @@ void BlockedTaskScheduler::_schedule() {
     LOG(INFO) << "BlockedTaskScheduler schedule thread start";
     _started.store(true);
     std::list<PipelineTask*> local_blocked_tasks;
-    int spin_count = 0;
+    int empty_times = 0;
     std::vector<PipelineTask*> ready_tasks;
 
     while (!_shutdown.load()) {
@@ -79,9 +80,16 @@ void BlockedTaskScheduler::_schedule() {
         while (iter != local_blocked_tasks.end()) {
             auto* task = *iter;
             auto state = task->get_state();
-            if (state == PENDING_FINISH || task->fragment_context()->is_canceled()) {
+            if (state == PENDING_FINISH) {
                 // should cancel or should finish
                 if (task->is_pending_finish()) {
+                    iter++;
+                } else {
+                    _make_task_run(local_blocked_tasks, iter, ready_tasks, PENDING_FINISH);
+                }
+            } else if (task->fragment_context()->is_canceled()) {
+                if (task->is_pending_finish()) {
+                    task->set_state(PENDING_FINISH);
                     iter++;
                 } else {
                     _make_task_run(local_blocked_tasks, iter, ready_tasks);
@@ -95,13 +103,25 @@ void BlockedTaskScheduler::_schedule() {
                 task->fragment_context()->cancel(PPlanFragmentCancelReason::TIMEOUT);
 
                 if (task->is_pending_finish()) {
+                    task->set_state(PENDING_FINISH);
                     iter++;
                 } else {
                     _make_task_run(local_blocked_tasks, iter, ready_tasks);
                 }
-            } else if (state == BLOCKED) {
-                if (!task->is_blocking()) {
-                    task->set_state(RUNNABLE);
+            } else if (state == BLOCKED_FOR_DEPENDENCY) {
+                if (task->has_dependency()) {
+                    iter++;
+                } else {
+                    _make_task_run(local_blocked_tasks, iter, ready_tasks);
+                }
+            } else if (state == BLOCKED_FOR_SOURCE) {
+                if (task->source_can_read()) {
+                    _make_task_run(local_blocked_tasks, iter, ready_tasks);
+                } else {
+                    iter++;
+                }
+            } else if (state == BLOCKED_FOR_SINK) {
+                if (task->sink_can_write()) {
                     _make_task_run(local_blocked_tasks, iter, ready_tasks);
                 } else {
                     iter++;
@@ -113,25 +133,25 @@ void BlockedTaskScheduler::_schedule() {
         }
 
         if (ready_tasks.empty()) {
-            spin_count += 1;
+            empty_times += 1;
         } else {
-            spin_count = 0;
+            empty_times = 0;
             for (auto& task : ready_tasks) {
+                task->stop_schedule_watcher();
                 _task_queue->push_back(task);
             }
             ready_tasks.clear();
         }
 
-        if (spin_count != 0 && spin_count % 64 == 0) {
+        if (empty_times != 0 && (empty_times & 63) == 0) {
 #ifdef __x86_64__
             _mm_pause();
 #else
-            // TODO: Maybe there's a better intrinsic like _mm_pause on non-x86_64 architecture.
             sched_yield();
 #endif
         }
-        if (spin_count == 640) {
-            spin_count = 0;
+        if (empty_times == 640) {
+            empty_times = 0;
             sched_yield();
         }
     }
@@ -140,13 +160,13 @@ void BlockedTaskScheduler::_schedule() {
 
 void BlockedTaskScheduler::_make_task_run(std::list<PipelineTask*>& local_tasks,
                                           std::list<PipelineTask*>::iterator& task_itr,
-                                          std::vector<PipelineTask*>& ready_tasks) {
+                                          std::vector<PipelineTask*>& ready_tasks,
+                                          PipelineTaskState t_state) {
     auto task = *task_itr;
+    task->start_schedule_watcher();
+    task->set_state(t_state);
     local_tasks.erase(task_itr++);
     ready_tasks.emplace_back(task);
-    if (task->get_state() == BLOCKED) {
-        task->set_state(RUNNABLE);
-    }
 }
 
 /////////////////////////  TaskScheduler  ///////////////////////////////////////////////////////////////////////////
@@ -174,11 +194,9 @@ Status TaskScheduler::start() {
 }
 
 Status TaskScheduler::schedule_task(PipelineTask* task) {
-    if (task->has_dependency()) {
-        task->set_state(BLOCKED);
+    if (task->is_blocking_state()) {
         _blocked_task_scheduler->add_blocked_task(task);
     } else {
-        task->set_state(RUNNABLE);
         _task_queue->push_back(task);
     }
     // TODO control num of task
@@ -201,18 +219,20 @@ void TaskScheduler::_do_work(size_t index) {
                 }
             }
         }
+        task->stop_worker_watcher();
         auto* fragment_ctx = task->fragment_context();
+        bool canceled = fragment_ctx->is_canceled();
 
         auto check_state = task->get_state();
         if (check_state == PENDING_FINISH) {
             bool is_pending = task->is_pending_finish();
             DCHECK(!is_pending) << "must not pending close " << task;
-            _try_close_task(task, fragment_ctx->is_canceled() ? CANCELED : FINISHED);
+            _try_close_task(task, canceled ? CANCELED : FINISHED);
             continue;
         }
         DCHECK(check_state != FINISHED && check_state != CANCELED) << "task already finish";
 
-        if (fragment_ctx->is_canceled()) {
+        if (canceled) {
             // may change from pending FINISH，should called cancel
             // also may change form BLOCK, other task called cancel
             _try_close_task(task, CANCELED);
@@ -250,14 +270,15 @@ void TaskScheduler::_do_work(size_t index) {
 
         auto pipeline_state = task->get_state();
         switch (pipeline_state) {
-        case BLOCKED:
+        case BLOCKED_FOR_SOURCE:
+        case BLOCKED_FOR_SINK:
             _blocked_task_scheduler->add_blocked_task(task);
             break;
         case RUNNABLE:
             queue->push_back(task, index);
             break;
         default:
-            DCHECK(false);
+            DCHECK(false) << "error state after run task, " << get_state_name(pipeline_state);
             break;
         }
     }

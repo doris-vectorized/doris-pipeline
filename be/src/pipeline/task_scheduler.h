@@ -186,12 +186,12 @@ public:
         if (core_id < 0) {
             core_id = _next_core.fetch_add(1) % _core_size;
         }
-        DCHECK(core_id < _core_size);
-        _async_queue[core_id].push(task);
+        push_back(task, core_id);
     }
 
     void push_back(PipelineTask* task, size_t core_id) {
         DCHECK(core_id < _core_size);
+        task->start_worker_watcher();
         _async_queue[core_id].push(task);
     }
 
@@ -230,7 +230,8 @@ private:
     void _schedule();
     void _make_task_run(std::list<PipelineTask*>& local_tasks,
                         std::list<PipelineTask*>::iterator& task_itr,
-                        std::vector<PipelineTask*>& ready_tasks);
+                        std::vector<PipelineTask*>& ready_tasks,
+                        PipelineTaskState state = PipelineTaskState::RUNNABLE);
 };
 
 class TaskScheduler {
@@ -249,8 +250,6 @@ public:
     Status start();
 
     void shutdown();
-
-    BlockedTaskScheduler* blocked_task_scheduler() const { return _blocked_task_scheduler.get(); }
 
     ExecEnv* exec_env() { return _exec_env; }
 

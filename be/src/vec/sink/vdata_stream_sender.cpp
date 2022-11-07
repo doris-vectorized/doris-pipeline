@@ -612,7 +612,7 @@ void VDataStreamSender::_roll_pb_block() {
     _cur_pb_block = (_cur_pb_block == &_pb_block1 ? &_pb_block2 : &_pb_block1);
 }
 
-void VDataStreamSender::registe_channels(pipeline::SinkBuffer* buffer) {
+void VDataStreamSender::registe_channels(pipeline::ExchangeSinkBuffer* buffer) {
     for (auto channel : _channels) {
         ((PipChannel*)channel)->registe(buffer);
     }

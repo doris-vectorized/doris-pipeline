@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "sink_buffer.h"
+#include "exchange_sink_buffer.h"
 
 #include <google/protobuf/stubs/common.h>
 
@@ -23,43 +23,45 @@
 #include <memory>
 
 #include "common/status.h"
+#include "pipeline/pipeline_fragment_context.h"
 #include "service/brpc.h"
 #include "util/proto_util.h"
 #include "util/time.h"
 #include "vec/sink/vdata_stream_sender.h"
 
 namespace doris::pipeline {
-// Disposable call back, it must be created on the heap.
-// It will destroy itself after call back
-// copy from sr
-template <typename T, typename C = void>
-class DisposableClosure : public google::protobuf::Closure {
+template <typename T>
+class SelfDeleteClosure : public google::protobuf::Closure {
 public:
-    using FailedFunc = std::function<void(const C&)>;
-    using SuccessFunc = std::function<void(const C&, const T&)>;
 
-    DisposableClosure(const C& ctx) : _ctx(ctx) {}
-    ~DisposableClosure() override = default;
-    // Disallow copy and assignment.
-    DisposableClosure(const DisposableClosure& other) = delete;
-    DisposableClosure& operator=(const DisposableClosure& other) = delete;
-    void addFailedHandler(FailedFunc fn) { _failed_handler = std::move(fn); }
-    void addSuccessHandler(SuccessFunc fn) { _success_handler = fn; }
+    SelfDeleteClosure(InstanceLoId id, bool eos) : _id(id), _eos(eos) {}
+    ~SelfDeleteClosure() override = default;
+    SelfDeleteClosure(const SelfDeleteClosure& other) = delete;
+    SelfDeleteClosure& operator=(const SelfDeleteClosure& other) = delete;
+    void addFailedHandler(std::function<void(const InstanceLoId&, const std::string&)> fail_fn) {
+        _fail_fn = std::move(fail_fn);
+    }
+    void addSuccessHandler(std::function<void(const InstanceLoId&, const bool&, const T&)> suc_fn) {
+        _suc_fn = suc_fn;
+    }
 
     void Run() noexcept override {
-        std::unique_ptr<DisposableClosure> self_guard(this);
+        std::unique_ptr<SelfDeleteClosure> self_guard(this);
         try {
             if (cntl.Failed()) {
-                LOG(WARNING) << "brpc failed, error=" << berror(cntl.ErrorCode())
-                             << ", error_text=" << cntl.ErrorText();
-                _failed_handler(_ctx);
+                std::string err = fmt::format(
+                        "failed to send brpc when exchange, error={}, error_text={}, client: {}, "
+                        "latency = {}",
+                        berror(cntl.ErrorCode()), cntl.ErrorText(),
+                        BackendOptions::get_localhost(), cntl.latency_us());
+                _fail_fn(_id, err);
             } else {
-                _success_handler(_ctx, result);
+                _suc_fn(_id, _eos, result);
             }
         } catch (const std::exception& exp) {
-            LOG(FATAL) << "[ExchangeSinkOperator] Callback error: " << exp.what();
+            LOG(FATAL) << "brpc callback error: " << exp.what();
         } catch (...) {
-            LOG(FATAL) << "[ExchangeSinkOperator] Callback error: Unknown";
+            LOG(FATAL) << "brpc callback error.";
         }
     }
 
@@ -68,23 +70,24 @@ public:
     T result;
 
 private:
-    const C _ctx;
-    FailedFunc _failed_handler;
-    SuccessFunc _success_handler;
+    std::function<void(const InstanceLoId&, const std::string&)> _fail_fn;
+    std::function<void(const InstanceLoId&, const bool&, const T&)> _suc_fn;
+    InstanceLoId _id;
+    bool _eos;
 };
 
-SinkBuffer::SinkBuffer(PUniqueId query_id, PlanNodeId dest_node_id, int send_id,
-                       RuntimeState* state)
-        : _full_time(0),
-          _is_finishing(false),
-          _finished_sink(0),
+ExchangeSinkBuffer::ExchangeSinkBuffer(PUniqueId query_id, PlanNodeId dest_node_id, int send_id, int be_number,
+                       PipelineFragmentContext* context)
+        : _is_finishing(false),
           _query_id(query_id),
           _dest_node_id(dest_node_id),
           _sender_id(send_id),
-          _be_number(state->be_number()),
-          _state(state) {}
+          _be_number(be_number),
+          _context(context) {}
 
-void SinkBuffer::close() {
+ExchangeSinkBuffer::~ExchangeSinkBuffer() = default;
+
+void ExchangeSinkBuffer::close() {
     for (const auto& pair : _instance_to_request) {
         if (pair.second) {
             pair.second->release_finst_id();
@@ -93,39 +96,16 @@ void SinkBuffer::close() {
     }
 }
 
-bool SinkBuffer::is_full() const {
-    // std::queue' read is concurrent safe without mutex
-    // Judgement may not that accurate because we do not known in advance which
-    // instance the data to be sent corresponds to
+bool ExchangeSinkBuffer::can_write() const {
     size_t max_package_size = 64 * _instance_to_package_queue.size();
     size_t total_package_size = 0;
     for (auto& [_, q] : _instance_to_package_queue) {
         total_package_size += q.size();
     }
-    const bool is_full = total_package_size > max_package_size;
-
-    int64_t last_full_timestamp = _last_full_timestamp;
-    int64_t full_time = _full_time;
-
-    if (is_full && last_full_timestamp == -1) {
-        _last_full_timestamp.compare_exchange_weak(last_full_timestamp, MonotonicNanos());
-    }
-    if (!is_full && last_full_timestamp != -1) {
-        // The following two update operations cannot guarantee atomicity as a whole without lock
-        // But we can accept bias in estimatation
-        _full_time.compare_exchange_weak(full_time,
-                                         full_time + (MonotonicNanos() - last_full_timestamp));
-        _last_full_timestamp.compare_exchange_weak(last_full_timestamp, -1);
-    }
-
-    return is_full;
+    return total_package_size <= max_package_size;
 }
 
-void SinkBuffer::set_finishing() {
-    _is_finishing = true;
-}
-
-bool SinkBuffer::is_pending_finish() const {
+bool ExchangeSinkBuffer::is_pending_finish() const {
     for (auto& pair : _instance_to_package_queue_mutex) {
         std::unique_lock<std::mutex> lock(*(pair.second));
         auto& id = pair.first;
@@ -136,7 +116,7 @@ bool SinkBuffer::is_pending_finish() const {
     return false;
 }
 
-void SinkBuffer::register_sink(TUniqueId fragment_instance_id) {
+void ExchangeSinkBuffer::register_sink(TUniqueId fragment_instance_id) {
     if (_is_finishing) {
         return;
     }
@@ -154,7 +134,7 @@ void SinkBuffer::register_sink(TUniqueId fragment_instance_id) {
     _instance_to_sending_by_pipeline[low_id] = true;
 }
 
-Status SinkBuffer::add_block(TransmitInfo&& request) {
+Status ExchangeSinkBuffer::add_block(TransmitInfo&& request) {
     if (_is_finishing) {
         return Status::OK();
     }
@@ -176,7 +156,7 @@ Status SinkBuffer::add_block(TransmitInfo&& request) {
     return Status::OK();
 }
 
-Status SinkBuffer::_send_rpc(InstanceLoId id) {
+Status ExchangeSinkBuffer::_send_rpc(InstanceLoId id) {
     std::unique_lock<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
 
     std::queue<TransmitInfo, std::list<TransmitInfo>>& q = _instance_to_package_queue[id];
@@ -198,25 +178,28 @@ Status SinkBuffer::_send_rpc(InstanceLoId id) {
         brpc_request->set_allocated_block(request.block.get());
     }
 
-    auto* _closure = new DisposableClosure<PTransmitDataResult, ClosureContext>({id, request.eos});
+    auto* _closure = new SelfDeleteClosure<PTransmitDataResult>(id, request.eos);
     _closure->cntl.set_timeout_ms(request.channel->_brpc_timeout_ms);
-    _closure->addFailedHandler([&](const ClosureContext& ctx) { _faild(ctx.id); });
-    _closure->addSuccessHandler([&](const ClosureContext& ctx, const PTransmitDataResult& result) {
-        Status s = Status(result.status());
-        if (!s.ok()) {
-            _faild(ctx.id);
-        } else if (ctx.eos) {
-            _ended(ctx.id);
-        } else {
-            _send_rpc(ctx.id);
-        }
-    });
+    _closure->addFailedHandler(
+            [&](const InstanceLoId& id, const std::string& err) { _failed(id, err); });
+    _closure->addSuccessHandler(
+            [&](const InstanceLoId& id, const bool& eos, const PTransmitDataResult& result) {
+                Status s = Status(result.status());
+                if (!s.ok()) {
+                    _failed(id, fmt::format("exchange req success but status isn't ok: {}",
+                                           s.get_error_msg()));
+                } else if (eos) {
+                    _ended(id);
+                } else {
+                    _send_rpc(id);
+                }
+            });
 
     {
         SCOPED_SWITCH_THREAD_MEM_TRACKER_LIMITER(ExecEnv::GetInstance()->orphan_mem_tracker());
         if (enable_http_send_block(*brpc_request)) {
-            RETURN_IF_ERROR(transmit_block_http(_state, _closure, *brpc_request,
-                                                request.channel->_brpc_dest_addr));
+            RETURN_IF_ERROR(transmit_block_http(_context->get_runtime_state(), _closure,
+                                                *brpc_request, request.channel->_brpc_dest_addr));
         } else {
             transmit_block(*request.channel->_brpc_stub, _closure, *brpc_request);
         }
@@ -229,5 +212,26 @@ Status SinkBuffer::_send_rpc(InstanceLoId id) {
 
     return Status::OK();
 }
+
+void ExchangeSinkBuffer::_construct_request(InstanceLoId id) {
+    _instance_to_request[id] = std::make_unique<PTransmitDataParams>();
+    _instance_to_request[id]->set_allocated_finst_id(&_instance_to_finst_id[id]);
+    _instance_to_request[id]->set_allocated_query_id(&_query_id);
+
+    _instance_to_request[id]->set_node_id(_dest_node_id);
+    _instance_to_request[id]->set_sender_id(_sender_id);
+    _instance_to_request[id]->set_be_number(_be_number);
+}
+
+void ExchangeSinkBuffer::_ended(InstanceLoId id) {
+    std::unique_lock<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
+    _instance_to_sending_by_pipeline[id] = true;
+}
+
+void ExchangeSinkBuffer::_failed(InstanceLoId id, const std::string& err) {
+    _is_finishing = true;
+    _context->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR, err);
+    _ended(id);
+};
 
 } // namespace doris::pipeline

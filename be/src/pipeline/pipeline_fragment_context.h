@@ -43,9 +43,9 @@ public:
     RuntimeState* get_runtime_state() { return _runtime_state.get(); }
 
     // should be protected by lock?
-    bool is_canceled() const { return _cancelled; }
+    bool is_canceled() const { return _runtime_state->is_cancelled(); }
 
-    int32_t next_operator_template_id() { return _next_operator_template_id++; }
+    int32_t next_operator_builder_id() { return _next_operator_builder_id++; }
 
     Status prepare(const doris::TExecPlanFragmentParams& request);
 
@@ -88,7 +88,6 @@ private:
 
     std::mutex _status_lock;
     Status _exec_status;
-    bool _cancelled = false;
     PPlanFragmentCancelReason _cancel_reason;
     std::string _cancel_msg;
 
@@ -96,7 +95,7 @@ private:
     PipelineId _next_pipeline_id = 0;
     std::atomic<int> _closed_pipeline_cnt;
 
-    int32_t _next_operator_template_id = 10000;
+    int32_t _next_operator_builder_id = 10000;
 
     std::vector<std::unique_ptr<PipelineTask>> _tasks;
 
@@ -114,6 +113,10 @@ private:
 
     // If set the true, this plan fragment will be executed only after FE send execution start rpc.
     bool _need_wait_execution_trigger = false;
+
+    MonotonicStopWatch _fragment_watcher;
+    RuntimeProfile::Counter* _start_timer;
+    RuntimeProfile::Counter* _prepare_timer;
 
 private:
     Status _create_sink(const TDataSink& t_data_sink);

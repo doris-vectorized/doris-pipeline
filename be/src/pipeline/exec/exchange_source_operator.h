@@ -27,7 +27,7 @@ namespace doris::pipeline {
 
 class ExchangeSourceOperator : public Operator {
 public:
-    explicit ExchangeSourceOperator(OperatorBuilder* operator_template);
+    explicit ExchangeSourceOperator(OperatorBuilder*);
     Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;

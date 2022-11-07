@@ -17,18 +17,20 @@
 
 #pragma once
 
+#include "exchange_sink_buffer.h"
 #include "operator.h"
 #include "vec/sink/vdata_stream_sender.h"
 
 namespace doris {
 
 namespace pipeline {
-class SinkBuffer;
+class PipelineFragmentContext;
 
 // Now local exchange is not supported since VDataStreamRecvr is considered as a pipeline broker.
 class ExchangeSinkOperator : public Operator {
 public:
-    ExchangeSinkOperator(OperatorBuilder* operator_template, vectorized::VDataStreamSender* sink);
+    ExchangeSinkOperator(OperatorBuilder* operator_builder, vectorized::VDataStreamSender* sink,
+                         PipelineFragmentContext* context);
     ~ExchangeSinkOperator() override;
     Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status init(const TDataSink& tsink) override;
@@ -45,25 +47,28 @@ public:
     RuntimeState* state() { return _state; }
 
 private:
-    std::unique_ptr<SinkBuffer> _sink_buffer;
+    std::unique_ptr<ExchangeSinkBuffer> _sink_buffer;
     vectorized::VDataStreamSender* _sink;
     RuntimeState* _state = nullptr;
+    PipelineFragmentContext* _context;
 };
 
 class ExchangeSinkOperatorBuilder : public OperatorBuilder {
 public:
     ExchangeSinkOperatorBuilder(int32_t id, const std::string& name, ExecNode* exec_node,
-                                vectorized::VDataStreamSender* sink)
-            : OperatorBuilder(id, name, exec_node), _sink(sink) {}
+                                vectorized::VDataStreamSender* sink,
+                                PipelineFragmentContext* context)
+            : OperatorBuilder(id, name, exec_node), _sink(sink), _context(context) {}
 
     bool is_sink() const override { return true; }
 
     OperatorPtr build_operator() override {
-        return std::make_shared<ExchangeSinkOperator>(this, _sink);
+        return std::make_shared<ExchangeSinkOperator>(this, _sink, _context);
     }
 
 private:
     vectorized::VDataStreamSender* _sink;
+    PipelineFragmentContext* _context;
 };
 
 } // namespace pipeline

@@ -451,8 +451,6 @@ Status AggregationNode::prepare(RuntimeState* state) {
 }
 
 Status AggregationNode::alloc_resource(doris::RuntimeState* state) {
-    START_AND_SCOPE_SPAN(state->get_tracer(), span, "AggregationNode::open");
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::alloc_resource(state));
     SCOPED_CONSUME_MEM_TRACKER(mem_tracker());
 
@@ -474,7 +472,9 @@ Status AggregationNode::alloc_resource(doris::RuntimeState* state) {
 }
 
 Status AggregationNode::open(RuntimeState* state) {
-    RETURN_IF_ERROR(alloc_resource(state));
+    START_AND_SCOPE_SPAN(state->get_tracer(), span, "AggregationNode::open");
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+    RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_ERROR(_children[0]->open(state));
 
     // Streaming preaggregations do all processing in GetNext().
@@ -513,11 +513,10 @@ Status AggregationNode::get_next(RuntimeState* state, Block* block, bool* eos) {
                     _children[0]->get_next_after_projects(state, &_preagg_block, &child_eos),
                     _children[0]->get_next_span(), child_eos);
         } while (_preagg_block.rows() == 0 && !child_eos);
-
-        if (UNLIKELY(child_eos)) {
-            RETURN_IF_ERROR(_executor.get_result(state, block, eos));
-        } else {
+        if (_preagg_block.rows() != 0) {
             RETURN_IF_ERROR(_executor.pre_agg(&_preagg_block, block));
+        } else {
+            RETURN_IF_ERROR(_executor.get_result(state, block, eos));
         }
         // pre stream agg need use _num_row_return to decide whether to do pre stream agg
         _num_rows_returned += block->rows();
@@ -568,7 +567,6 @@ void AggregationNode::release_resource(RuntimeState* state) {
 Status AggregationNode::close(RuntimeState* state) {
     if (is_closed()) return Status::OK();
     START_AND_SCOPE_SPAN(state->get_tracer(), span, "AggregationNode::close");
-    release_resource(state);
     return ExecNode::close(state);
 }
 

@@ -31,7 +31,7 @@ namespace doris::pipeline {
 
 class ScanOperator : public Operator {
 public:
-    ScanOperator(OperatorBuilder* operator_template, vectorized::VScanNode* scan_node);
+    ScanOperator(OperatorBuilder* operator_builder, vectorized::VScanNode* scan_node);
 
     bool can_read() override; // for source
 

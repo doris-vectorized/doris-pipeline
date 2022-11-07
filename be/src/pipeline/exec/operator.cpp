@@ -19,22 +19,22 @@
 
 namespace doris::pipeline {
 
-Operator::Operator(OperatorBuilder* operator_template)
-        : _operator_template(operator_template),
+Operator::Operator(OperatorBuilder* operator_builder)
+        : _operator_builder(operator_builder),
           _num_rows_returned(0),
           _limit(-1),
           _is_closed(false) {}
 
 bool Operator::is_sink() const {
-    return _operator_template->is_sink();
+    return _operator_builder->is_sink();
 }
 
 bool Operator::is_source() const {
-    return _operator_template->is_source();
+    return _operator_builder->is_source();
 }
 
 Status Operator::init(ExecNode* exec_node, RuntimeState* state) {
-    _runtime_profile.reset(new RuntimeProfile(_operator_template->get_name()));
+    _runtime_profile.reset(new RuntimeProfile(_operator_builder->get_name()));
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _rows_returned_rate = runtime_profile()->add_derived_counter(
             ExecNode::ROW_THROUGHPUT_COUNTER, TUnit::UNIT_PER_SECOND,
@@ -65,10 +65,6 @@ Status Operator::prepare(RuntimeState* state) {
 }
 
 Status Operator::open(RuntimeState* state) {
-    // for poc
-    if (_operator_template->exec_node()) {
-        RETURN_IF_ERROR(_operator_template->exec_node()->alloc_resource(state));
-    }
     return Status::OK();
 }
 
@@ -77,9 +73,6 @@ Status Operator::close(RuntimeState* state) {
         return Status::OK();
     }
     _is_closed = true;
-    if (_operator_template->exec_node()) {
-        _operator_template->exec_node()->release_resource(state);
-    }
     if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
@@ -95,7 +88,7 @@ void Operator::reached_limit(vectorized::Block* block, bool* eos) {
 }
 
 const RowDescriptor& Operator::row_desc() {
-    return _operator_template->row_desc();
+    return _operator_builder->row_desc();
 }
 
 /////////////////////////////////////// OperatorBuilder ////////////////////////////////////////////////////////////

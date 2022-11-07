@@ -121,24 +121,18 @@ public:
     // Process data
     // Eg: Projection, Union All, HashProbe
     virtual Status execute(RuntimeState* state, vectorized::Block* input_block,
-                           vectorized::Block* output_block, bool* eos) {
-        return Status::OK();
-    }
+                           vectorized::Block* output_block, bool* eos);
 
     // Emit data, both need impl with method: sink
     // Eg: Aggregation, Sort
-    virtual Status pull(RuntimeState* state, vectorized::Block* output_block, bool* eos) {
-        return Status::OK();
-    }
+    virtual Status pull(RuntimeState* state, vectorized::Block* output_block, bool* eos);
 
     bool can_read() const { return _can_read; }
 
     // Sink Data to ExecNode to do some stock work, both need impl with method: get_result
     // `eos` means source is exhausted, exec node should do some finalize work
     // Eg: Aggregation, Sort
-    virtual Status sink(RuntimeState* state, vectorized::Block* input_block, bool eos) {
-        return Status::OK();
-    }
+    virtual Status sink(RuntimeState* state, vectorized::Block* input_block, bool eos);
 
     // Resets the stream of row batches to be retrieved by subsequent GetNext() calls.
     // Clears all internal state, returning this node to the state it was in after calling

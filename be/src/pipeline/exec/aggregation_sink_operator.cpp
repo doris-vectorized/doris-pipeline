@@ -21,10 +21,10 @@
 
 namespace doris::pipeline {
 
-AggSinkOperator::AggSinkOperator(AggSinkOperatorBuilder* operator_template,
+AggSinkOperator::AggSinkOperator(AggSinkOperatorBuilder* operator_builder,
                                  vectorized::AggregationNode* agg_node,
                                  std::shared_ptr<AggContext> agg_context)
-        : Operator(operator_template), _agg_node(agg_node), _agg_context(std::move(agg_context)) {}
+        : Operator(operator_builder), _agg_node(agg_node), _agg_context(std::move(agg_context)) {}
 
 Status AggSinkOperator::init(ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
@@ -40,7 +40,7 @@ Status AggSinkOperator::prepare(RuntimeState* state) {
 
 Status AggSinkOperator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::open(state));
-    _agg_node->alloc_resource(state);
+    RETURN_IF_ERROR(_agg_node->alloc_resource(state));
     return Status::OK();
 }
 

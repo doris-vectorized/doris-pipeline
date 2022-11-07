@@ -40,23 +40,17 @@ struct TransmitInfo {
     bool eos;
 };
 
-struct ClosureContext {
-    InstanceLoId id;
-    bool eos;
-};
+class PipelineFragmentContext;
 
-// Each ExchangeSinkOperator have one SinkBuffer
-class SinkBuffer {
+// Each ExchangeSinkOperator have one ExchangeSinkBuffer
+class ExchangeSinkBuffer {
 public:
-    SinkBuffer(PUniqueId, int, PlanNodeId, RuntimeState*);
-    ~SinkBuffer() = default;
+    ExchangeSinkBuffer(PUniqueId, int, PlanNodeId, int, PipelineFragmentContext*);
+    ~ExchangeSinkBuffer();
     void register_sink(TUniqueId);
     Status add_block(TransmitInfo&& request);
-    bool is_full() const;
-
-    void set_finishing();
+    bool can_write() const;
     bool is_pending_finish() const;
-
     void close();
 
 private:
@@ -69,43 +63,24 @@ private:
     phmap::flat_hash_map<InstanceLoId, PackageSeq> _instance_to_seq;
     phmap::flat_hash_map<InstanceLoId, std::unique_ptr<PTransmitDataParams>> _instance_to_request;
     phmap::flat_hash_map<InstanceLoId, PUniqueId> _instance_to_finst_id;
-    //    phmap::flat_hash_map<InstanceLoId, PlanNodeId> _instance_to_dest_node_id;
     phmap::flat_hash_map<InstanceLoId, bool> _instance_to_sending_by_pipeline;
 
-    mutable std::atomic<int64_t> _last_full_timestamp = -1;
-    mutable std::atomic<int64_t> _full_time = 0;
 
     std::atomic<bool> _is_finishing;
-    std::atomic<int> _finished_sink;
     PUniqueId _query_id;
     PlanNodeId _dest_node_id;
     // Sender instance id, unique within a fragment. StreamSender save the variable
     int _sender_id;
     int _be_number;
 
-    RuntimeState* _state;
+    PipelineFragmentContext* _context;
 
 private:
     Status _send_rpc(InstanceLoId);
     // must hold the _instance_to_package_queue_mutex[id] mutex to opera
-    void _construct_request(InstanceLoId id) {
-        _instance_to_request[id] = std::make_unique<PTransmitDataParams>();
-        _instance_to_request[id]->set_allocated_finst_id(&_instance_to_finst_id[id]);
-        _instance_to_request[id]->set_allocated_query_id(&_query_id);
-
-        _instance_to_request[id]->set_node_id(_dest_node_id);
-        _instance_to_request[id]->set_sender_id(_sender_id);
-        _instance_to_request[id]->set_be_number(_be_number);
-    }
-    void _ended(InstanceLoId id) {
-        std::unique_lock<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
-        _instance_to_sending_by_pipeline[id] = true;
-    }
-    void _faild(InstanceLoId id) {
-        _is_finishing = true;
-        _state->set_is_cancelled(true);
-        _ended(id);
-    };
+    void _construct_request(InstanceLoId id);
+    inline void _ended(InstanceLoId id);
+    inline void _failed(InstanceLoId id, const std::string& err);
 };
 
 } // namespace pipeline

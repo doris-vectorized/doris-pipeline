@@ -35,6 +35,7 @@ namespace doris::pipeline {
  *              |                                    |          ^        |                      transfer 7|
  *              |------------------------------------|          |--------|---------------------------------------> FINISHED
  *                transfer 1                                   transfer 9          transfer 8
+ * BLOCKED include BLOCKED_FOR_DEPENDENCY, BLOCKED_FOR_SOURCE and BLOCKED_FOR_SINK.
  *
  * transfer 0 (NOT_READY -> BLOCKED): this pipeline task has some incomplete dependencies
  * transfer 1 (NOT_READY -> RUNNABLE): this pipeline task has no incomplete dependencies
@@ -49,16 +50,37 @@ namespace doris::pipeline {
  */
 enum PipelineTaskState : uint8_t {
     NOT_READY = 0, // do not prepare
-    BLOCKED = 1,   // have some dependencies not finished or some conditions not met
-    BLOCKED_FOR_DEPENDENCY = 2,
-    BLOCKED_FOR_SOURCE = 3,
-    BLOCKED_FOR_SINK = 4,
-    RUNNABLE = 5, // can execute
+    BLOCKED_FOR_DEPENDENCY = 1,
+    BLOCKED_FOR_SOURCE = 2,
+    BLOCKED_FOR_SINK = 3,
+    RUNNABLE = 4, // can execute
     PENDING_FINISH =
-            6, // compute task is over, but still hold resource. like some scan and sink task
-    FINISHED = 7,
-    CANCELED = 8
+            5, // compute task is over, but still hold resource. like some scan and sink task
+    FINISHED = 6,
+    CANCELED = 7
 };
+
+inline const char* get_state_name(PipelineTaskState idx) {
+    switch (idx) {
+    case PipelineTaskState::NOT_READY:
+        return "NOT_READY";
+    case PipelineTaskState::BLOCKED_FOR_DEPENDENCY:
+        return "BLOCKED_FOR_DEPENDENCY";
+    case PipelineTaskState::BLOCKED_FOR_SOURCE:
+        return "BLOCKED_FOR_SOURCE";
+    case PipelineTaskState::BLOCKED_FOR_SINK:
+        return "BLOCKED_FOR_SINK";
+    case PipelineTaskState::RUNNABLE:
+        return "RUNNABLE";
+    case PipelineTaskState::PENDING_FINISH:
+        return "PENDING_FINISH";
+    case PipelineTaskState::FINISHED:
+        return "FINISHED";
+    case PipelineTaskState::CANCELED:
+        return "CANCELED";
+    }
+    __builtin_unreachable();
+}
 
 // The class do the pipeline task. Minest schdule union by task scheduler
 class PipelineTask {
@@ -87,13 +109,29 @@ public:
     // must be call after all pipeline task is finish to release resource
     Status close();
 
-    PipelineTaskState get_state() { return _cur_state; }
+    void start_worker_watcher() { _wait_worker_watcher.start(); }
+    void stop_worker_watcher() { _wait_worker_watcher.stop(); }
+    void start_schedule_watcher() { _wait_schedule_watcher.start(); }
+    void stop_schedule_watcher() { _wait_schedule_watcher.stop(); }
 
-    void set_state(PipelineTaskState state) { _cur_state = state; }
+    PipelineTaskState get_state() { return _cur_state; }
+    void set_state(PipelineTaskState state);
+    bool is_blocking_state() {
+        switch(_cur_state) {
+        case BLOCKED_FOR_DEPENDENCY:
+        case BLOCKED_FOR_SOURCE:
+        case BLOCKED_FOR_SINK:
+            return true;
+        default:
+            return false;
+        }
+    }
 
     bool is_pending_finish() { return _source->is_pending_finish() || _sink->is_pending_finish(); }
 
-    bool is_blocking() { return has_dependency() || !_source->can_read() || !_sink->can_write(); }
+    bool source_can_read() { return _source->can_read(); }
+
+    bool sink_can_write() { return _sink->can_write(); }
 
     Status finalize();
 
@@ -107,13 +145,13 @@ public:
 
     QueryFragmentsCtx* query_fragments_context();
 
-    int get_previous_core_id() { return _previous_schedule_id; }
+    int get_previous_core_id() const { return _previous_schedule_id; }
 
     void set_previous_core_id(int id) { _previous_schedule_id = id; }
 
     bool has_dependency();
 
-    uint32_t index() { return _index; }
+    uint32_t index() const { return _index; }
 
     OperatorPtr get_root() { return _root; }
 
@@ -122,6 +160,7 @@ public:
 private:
     Status open();
     void _init_profile();
+    void _init_state();
 
 private:
     uint32_t _index;
@@ -144,5 +183,16 @@ private:
     std::unique_ptr<RuntimeProfile> _task_profile;
     RuntimeProfile::Counter* _sink_timer;
     RuntimeProfile::Counter* _get_block_timer;
+    RuntimeProfile::Counter* _block_counts;
+    MonotonicStopWatch _wait_source_watcher;
+    RuntimeProfile::Counter* _wait_source_timer;
+    MonotonicStopWatch _wait_sink_watcher;
+    RuntimeProfile::Counter* _wait_sink_timer;
+    MonotonicStopWatch _wait_worker_watcher;
+    RuntimeProfile::Counter* _wait_worker_timer;
+    // TODO we should calculate the time between when really runnable and runnable
+    MonotonicStopWatch _wait_schedule_watcher;
+    RuntimeProfile::Counter* _wait_schedule_timer;
+    RuntimeProfile::Counter* _yield_counts;
 };
 } // namespace doris::pipeline

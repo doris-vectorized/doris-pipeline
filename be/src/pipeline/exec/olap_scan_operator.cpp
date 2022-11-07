@@ -21,9 +21,9 @@
 
 namespace doris::pipeline {
 
-OlapScanOperator::OlapScanOperator(OperatorBuilder* operator_template,
+OlapScanOperator::OlapScanOperator(OperatorBuilder* operator_builder,
                                    vectorized::NewOlapScanNode* scan_node)
-        : ScanOperator(operator_template, scan_node) {}
+        : ScanOperator(operator_builder, scan_node) {}
 
 OlapScanOperatorBuilder::OlapScanOperatorBuilder(uint32_t id, const std::string& name,
                                                  vectorized::NewOlapScanNode* new_olap_scan_node)

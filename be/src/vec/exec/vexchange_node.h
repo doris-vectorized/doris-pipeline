@@ -37,6 +37,7 @@ public:
 
     virtual Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     virtual Status prepare(RuntimeState* state) override;
+    virtual Status alloc_resource(RuntimeState* state) override;
     virtual Status open(RuntimeState* state) override;
     virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     virtual Status get_next(RuntimeState* state, Block* row_batch, bool* eos) override;

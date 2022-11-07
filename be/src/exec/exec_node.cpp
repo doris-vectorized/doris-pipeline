@@ -250,7 +250,7 @@ Status ExecNode::alloc_resource(doris::RuntimeState* state) {
 }
 
 Status ExecNode::open(RuntimeState* state) {
-    return ExecNode::alloc_resource(state);
+    return alloc_resource(state);
 }
 
 Status ExecNode::reset(RuntimeState* state) {
@@ -305,7 +305,7 @@ Status ExecNode::close(RuntimeState* state) {
             result = st;
         }
     }
-    ExecNode::release_resource(state);
+    release_resource(state);
     return result;
 }
 
@@ -847,6 +847,19 @@ Status ExecNode::get_next_after_projects(RuntimeState* state, vectorized::Block*
         return do_projections(&_origin_block, block);
     }
     return get_next(state, block, eos);
+}
+
+Status ExecNode::execute(RuntimeState* state, vectorized::Block* input_block,
+               vectorized::Block* output_block, bool* eos) {
+    return Status::NotSupported("{} not implements execute", get_name());
+}
+
+Status ExecNode::pull(RuntimeState* state, vectorized::Block* output_block, bool* eos) {
+    return Status::NotSupported("{} not implements pull", get_name());
+}
+
+Status ExecNode::sink(RuntimeState* state, vectorized::Block* input_block, bool eos) {
+    return Status::NotSupported("{} not implements sink", get_name());
 }
 
 } // namespace doris

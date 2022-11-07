@@ -33,7 +33,7 @@ class SortSourceOperatorBuilder;
 
 class SortSourceOperator : public Operator {
 public:
-    SortSourceOperator(SortSourceOperatorBuilder* operator_template,
+    SortSourceOperator(SortSourceOperatorBuilder* operator_builder,
                        vectorized::VSortNode* sort_node);
     Status init(ExecNode* exec_node, RuntimeState* state) override;
 

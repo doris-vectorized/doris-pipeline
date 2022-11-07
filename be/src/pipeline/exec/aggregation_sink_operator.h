@@ -31,7 +31,7 @@ namespace pipeline {
 class AggSinkOperatorBuilder;
 class AggSinkOperator : public Operator {
 public:
-    AggSinkOperator(AggSinkOperatorBuilder* operator_template, vectorized::AggregationNode*,
+    AggSinkOperator(AggSinkOperatorBuilder* operator_builder, vectorized::AggregationNode*,
                     std::shared_ptr<AggContext>);
 
     Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;

@@ -30,10 +30,17 @@ void PipelineTask::_init_profile() {
     _task_profile.reset(task_profile);
     _sink_timer = ADD_TIMER(_task_profile, "SinkTime");
     _get_block_timer = ADD_TIMER(_task_profile, "GetBlockTime");
+    _wait_source_timer = ADD_TIMER(_task_profile, "WaitSourceTime");
+    _wait_sink_timer = ADD_TIMER(_task_profile, "WaitSinkTime");
+    _wait_worker_timer = ADD_TIMER(_task_profile, "WaitWorkerTime");
+    _wait_schedule_timer = ADD_TIMER(_task_profile, "WaitScheduleTime");
+    _block_counts = ADD_COUNTER(_task_profile, "NumBlockedTimes", TUnit::UNIT);
+    _yield_counts = ADD_COUNTER(_task_profile, "NumYieldTimes", TUnit::UNIT);
 }
 
 Status PipelineTask::prepare(RuntimeState* state) {
     DCHECK(_sink);
+    DCHECK(_cur_state == NOT_READY);
     _init_profile();
     RETURN_IF_ERROR(_sink->prepare(state));
     for (auto& o : _operators) {
@@ -42,8 +49,21 @@ Status PipelineTask::prepare(RuntimeState* state) {
     _task_profile->add_child(_sink->runtime_profile(), true, nullptr);
     RETURN_IF_ERROR(_root->link_profile(_task_profile.get()));
     _block.reset(new doris::vectorized::Block());
+    _init_state();
     _prepared = true;
     return Status::OK();
+}
+
+void PipelineTask::_init_state() {
+    if (has_dependency()) {
+        set_state(BLOCKED_FOR_DEPENDENCY);
+    } else if (!(_source->can_read())) {
+        set_state(BLOCKED_FOR_SOURCE);
+    } else if (!(_sink->can_write())) {
+        set_state(BLOCKED_FOR_SINK);
+    } else {
+        set_state(RUNNABLE);
+    }
 }
 
 bool PipelineTask::has_dependency() {
@@ -85,11 +105,28 @@ Status PipelineTask::execute(bool* eos) {
     // The status must be runnable
     *eos = false;
     if (!_opened) {
+        if (!_source->can_read()) {
+            set_state(BLOCKED_FOR_SOURCE);
+            return Status::OK();
+        }
+        if (!_sink->can_write()) {
+            set_state(BLOCKED_FOR_SINK);
+            return Status::OK();
+        }
         SCOPED_RAW_TIMER(&time_spent);
         RETURN_IF_ERROR(open());
     }
-    while (_source->can_read() && _sink->can_write() && !_fragment_context->is_canceled()) {
+    while (!_fragment_context->is_canceled()) {
+        if (!_source->can_read()) {
+            set_state(BLOCKED_FOR_SOURCE);
+            break;
+        }
+        if (!_sink->can_write()) {
+            set_state(BLOCKED_FOR_SINK);
+            break;
+        }
         if (time_spent > THREAD_TIME_SLICE) {
+            COUNTER_UPDATE(_yield_counts, 1);
             break;
         }
         SCOPED_RAW_TIMER(&time_spent);
@@ -110,10 +147,6 @@ Status PipelineTask::execute(bool* eos) {
         }
     }
 
-    if (!*eos && (!_source->can_read() || !_sink->can_write())) {
-        set_state(BLOCKED);
-    }
-
     return Status::OK();
 }
 
@@ -129,11 +162,44 @@ Status PipelineTask::close() {
             s = tem;
         }
     }
+    if (_opened) {
+        COUNTER_UPDATE(_wait_source_timer, _wait_source_watcher.elapsed_time());
+        COUNTER_UPDATE(_wait_sink_timer, _wait_sink_watcher.elapsed_time());
+        COUNTER_UPDATE(_wait_worker_timer, _wait_worker_watcher.elapsed_time());
+        COUNTER_UPDATE(_wait_schedule_timer, _wait_schedule_watcher.elapsed_time());
+    }
     _pipeline->close(_state);
     return s;
 }
 
 QueryFragmentsCtx* PipelineTask::query_fragments_context() {
     return _fragment_context->get_query_context();
+}
+
+// The FSM see PipelineTaskState's comment
+void PipelineTask::set_state(PipelineTaskState state) {
+    if (_cur_state == state) {
+        return;
+    }
+    if (_cur_state == BLOCKED_FOR_SOURCE) {
+        if (state == RUNNABLE) {
+            _wait_source_watcher.stop();
+        }
+    } else if (_cur_state == BLOCKED_FOR_SINK) {
+        if (state == RUNNABLE) {
+            _wait_sink_watcher.stop();
+        }
+    } else if (_cur_state == RUNNABLE) {
+        if (state == BLOCKED_FOR_SOURCE) {
+            _wait_source_watcher.start();
+            COUNTER_UPDATE(_block_counts, 1);
+        } else if (state == BLOCKED_FOR_SINK) {
+            _wait_sink_watcher.start();
+            COUNTER_UPDATE(_block_counts, 1);
+        } else if (state == BLOCKED_FOR_DEPENDENCY) {
+            COUNTER_UPDATE(_block_counts, 1);
+        }
+    }
+    _cur_state = state;
 }
 } // namespace doris::pipeline

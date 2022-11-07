@@ -33,7 +33,7 @@ class SortSinkOperatorBuilder;
 
 class SortSinkOperator : public Operator {
 public:
-    SortSinkOperator(SortSinkOperatorBuilder* operator_template, vectorized::VSortNode* sort_node);
+    SortSinkOperator(SortSinkOperatorBuilder* operator_builder, vectorized::VSortNode* sort_node);
     Status init(ExecNode* exec_node, RuntimeState* state) override;
 
     Status open(RuntimeState* state) override;

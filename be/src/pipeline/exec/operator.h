@@ -49,7 +49,7 @@ using Operators = std::vector<OperatorPtr>;
 
 class Operator {
 public:
-    explicit Operator(OperatorBuilder* operator_template);
+    explicit Operator(OperatorBuilder* operator_builder);
     virtual ~Operator() = default;
 
     // After both sink and source need to know the cancel state.
@@ -132,7 +132,7 @@ public:
     // and add block rows for profile
     void reached_limit(vectorized::Block* block, bool* eos);
 
-    const OperatorBuilder* operator_template() const { return _operator_template; }
+    const OperatorBuilder* operator_builder() const { return _operator_builder; }
 
     const RowDescriptor& row_desc();
 
@@ -144,7 +144,7 @@ public:
 protected:
     std::unique_ptr<MemTracker> _mem_tracker;
 
-    OperatorBuilder* _operator_template;
+    OperatorBuilder* _operator_builder;
     // source has no child
     // if an operator is not source, it will get data from its child.
     OperatorPtr _child;
@@ -194,7 +194,6 @@ protected:
     const int32_t _id;
     const std::string _name;
     ExecNode* _related_exec_node;
-    std::shared_ptr<RuntimeProfile> _runtime_profile;
 
     RuntimeState* _state = nullptr;
     bool _is_closed = false;

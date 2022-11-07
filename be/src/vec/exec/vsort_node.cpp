@@ -75,8 +75,6 @@ Status VSortNode::prepare(RuntimeState* state) {
 }
 
 Status VSortNode::alloc_resource(doris::RuntimeState* state) {
-    START_AND_SCOPE_SPAN(state->get_tracer(), span, "VSortNode::open");
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::alloc_resource(state));
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     RETURN_IF_ERROR(_vsort_exec_exprs.open(state));
@@ -101,7 +99,9 @@ Status VSortNode::sink(RuntimeState* state, vectorized::Block* input_block, bool
 }
 
 Status VSortNode::open(RuntimeState* state) {
-    RETURN_IF_ERROR(alloc_resource(state));
+    START_AND_SCOPE_SPAN(state->get_tracer(), span, "VSortNode::open");
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+    RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_ERROR(child(0)->open(state));
 
     // The child has been opened and the sorter created. Sort the input.
@@ -156,7 +156,6 @@ Status VSortNode::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-    release_resource(state);
     return ExecNode::close(state);
 }
 

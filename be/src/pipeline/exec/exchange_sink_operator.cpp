@@ -18,15 +18,19 @@
 #include "exchange_sink_operator.h"
 
 #include "common/status.h"
+#include "exchange_sink_buffer.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "sink_buffer.h"
+#include "util/brpc_client_cache.h"
+#include "vec/exprs/vexpr.h"
+#include "vec/runtime/vpartition_info.h"
 #include "vec/sink/vdata_stream_sender.h"
 
 namespace doris::pipeline {
 
-ExchangeSinkOperator::ExchangeSinkOperator(OperatorBuilder* operator_template,
-                                           vectorized::VDataStreamSender* sink)
-        : Operator(operator_template), _sink(sink) {}
+ExchangeSinkOperator::ExchangeSinkOperator(OperatorBuilder* operator_builder,
+                                           vectorized::VDataStreamSender* sink,
+                                           PipelineFragmentContext* context)
+        : Operator(operator_builder), _sink(sink), _context(context) {}
 
 ExchangeSinkOperator::~ExchangeSinkOperator() = default;
 
@@ -42,8 +46,8 @@ Status ExchangeSinkOperator::init(const TDataSink& tsink) {
     PUniqueId query_id;
     query_id.set_hi(_state->query_id().hi);
     query_id.set_lo(_state->query_id().lo);
-    _sink_buffer = std::make_unique<SinkBuffer>(query_id, tsink.stream_sink.dest_node_id,
-                                                _sink->_sender_id, _state);
+    _sink_buffer = std::make_unique<ExchangeSinkBuffer>(query_id, tsink.stream_sink.dest_node_id,
+                                                _sink->_sender_id, _state->be_number(), _context);
     return Status::OK();
 }
 
@@ -65,7 +69,7 @@ Status ExchangeSinkOperator::open(RuntimeState* state) {
 }
 
 bool ExchangeSinkOperator::can_write() {
-    return !_sink_buffer->is_full() && _sink->channel_all_can_write();
+    return _sink_buffer->can_write() && _sink->channel_all_can_write();
 }
 
 Status ExchangeSinkOperator::finalize(RuntimeState* state) {

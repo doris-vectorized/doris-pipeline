@@ -31,7 +31,7 @@ set(PIPELINE_FILES
         exec/olap_scan_operator.cpp
         exec/exchange_source_operator.cpp
         exec/exchange_sink_operator.cpp
-        exec/sink_buffer.cpp
+        exec/exchange_sink_buffer.cpp
         exec/result_sink_operator.cpp
         exec/aggregation_sink_operator.cpp
         exec/aggregation_source_operator.cpp

@@ -21,12 +21,12 @@
 #include "vec/sink/vresult_sink.h"
 
 namespace doris::pipeline {
-ResultSinkOperator::ResultSinkOperator(OperatorBuilder* operator_template,
+ResultSinkOperator::ResultSinkOperator(OperatorBuilder* operator_builder,
                                        vectorized::VResultSink* sink)
-        : Operator(operator_template), _sink(sink) {}
+        : Operator(operator_builder), _sink(sink) {}
 
 Status ResultSinkOperator::init(const TDataSink& tsink) {
-    return _sink->init(tsink);
+    return Status::OK();
 }
 
 Status ResultSinkOperator::prepare(RuntimeState* state) {

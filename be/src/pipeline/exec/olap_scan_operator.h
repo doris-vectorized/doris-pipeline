@@ -27,7 +27,7 @@ namespace doris::pipeline {
 class OlapScanOperatorBuilder;
 class OlapScanOperator : public ScanOperator {
 public:
-    OlapScanOperator(OperatorBuilder* operator_template, vectorized::NewOlapScanNode* scan_node);
+    OlapScanOperator(OperatorBuilder* operator_builder, vectorized::NewOlapScanNode* scan_node);
 };
 
 class OlapScanOperatorBuilder : public ScanOperatorBuilder {

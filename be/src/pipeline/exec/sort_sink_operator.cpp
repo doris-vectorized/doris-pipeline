@@ -25,9 +25,9 @@ SortSinkOperatorBuilder::SortSinkOperatorBuilder(int32_t id, const string& name,
                                                  vectorized::VSortNode* sort_node)
         : OperatorBuilder(id, name, sort_node), _sort_node(sort_node) {}
 
-SortSinkOperator::SortSinkOperator(SortSinkOperatorBuilder* operator_template,
+SortSinkOperator::SortSinkOperator(SortSinkOperatorBuilder* operator_builder,
                                    vectorized::VSortNode* sort_node)
-        : Operator(operator_template), _sort_node(sort_node) {}
+        : Operator(operator_builder), _sort_node(sort_node) {}
 
 Status SortSinkOperator::init(doris::ExecNode* node, doris::RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(node, state));
@@ -45,6 +45,7 @@ Status SortSinkOperator::close(doris::RuntimeState* state) {
 }
 
 Status SortSinkOperator::sink(doris::RuntimeState* state, vectorized::Block* block, bool eos) {
+    // TODO pipeline when sort node's _reuse_mem is false, we should pass a new block to it.
     RETURN_IF_ERROR(_sort_node->sink(state, block, eos));
     return Status::OK();
 }

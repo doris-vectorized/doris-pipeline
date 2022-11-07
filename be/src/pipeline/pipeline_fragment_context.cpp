@@ -63,23 +63,23 @@ PipelineFragmentContext::PipelineFragmentContext(const TUniqueId& query_id,
           _exec_env(exec_env),
           _cancel_reason(PPlanFragmentCancelReason::INTERNAL_ERROR),
           _closed_pipeline_cnt(0),
-          _query_ctx(std::move(query_ctx)) {}
+          _query_ctx(std::move(query_ctx)) {
+    _fragment_watcher.start();
+}
 
 PipelineFragmentContext::~PipelineFragmentContext() = default;
 
 void PipelineFragmentContext::cancel(const PPlanFragmentCancelReason& reason,
                                      const std::string& msg) {
-    if (!_cancelled) {
+    if (!_runtime_state->is_cancelled()) {
         std::lock_guard<std::mutex> l(_status_lock);
-        if (_cancelled) {
+        if (_runtime_state->is_cancelled()) {
             return;
         }
-        if (reason == PPlanFragmentCancelReason::LIMIT_REACH) {
-            // TODO pipeline report on cancel
-        } else {
+        if (reason != PPlanFragmentCancelReason::LIMIT_REACH) {
             _exec_status = Status::Cancelled(msg);
         }
-        _cancelled = true;
+        _runtime_state->set_is_cancelled(true);
         _cancel_reason = reason;
         _cancel_msg = msg;
         // To notify wait_for_start()
@@ -105,8 +105,13 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     if (_prepared) {
         return Status::InternalError("Already prepared");
     }
-    auto* fragment_context = this;
+    _runtime_profile.reset(new RuntimeProfile("PipelineContext"));
+    _start_timer = ADD_TIMER(_runtime_profile, "StartTime");
+    COUNTER_UPDATE(_start_timer, _fragment_watcher.elapsed_time());
+    _prepare_timer = ADD_TIMER(_runtime_profile, "PrepareTime");
+    SCOPED_TIMER(_prepare_timer);
 
+    auto* fragment_context = this;
     OpentelemetryTracer tracer = telemetry::get_noop_tracer();
     if (opentelemetry::trace::Tracer::GetCurrentSpan()->GetContext().IsValid()) {
         tracer = telemetry::get_tracer(print_id(_query_id));
@@ -157,7 +162,6 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     if (request.query_options.__isset.is_report_success) {
         fragment_context->set_is_report_success(request.query_options.is_report_success);
     }
-    _runtime_profile.reset(new RuntimeProfile("PipelineContext"));
 
     RETURN_IF_ERROR(_runtime_state->create_block_mgr());
     auto* desc_tbl = _query_ctx->desc_tbl;
@@ -276,14 +280,14 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
     case TPlanNodeType::OLAP_SCAN_NODE: {
         auto* new_olap_scan_node = assert_cast<vectorized::NewOlapScanNode*>(node);
         OperatorBuilderPtr operator_t = std::make_shared<OlapScanOperatorBuilder>(
-                fragment_context->next_operator_template_id(), "OlapScanOperator",
+                fragment_context->next_operator_builder_id(), "OlapScanOperator",
                 new_olap_scan_node);
         RETURN_IF_ERROR(cur_pipe->add_operator(operator_t));
         break;
     }
     case TPlanNodeType::EXCHANGE_NODE: {
         OperatorBuilderPtr operator_t = std::make_shared<ExchangeSourceOperatorBuilder>(
-                next_operator_template_id(), "ExchangeSourceOperator", node);
+                next_operator_builder_id(), "ExchangeSourceOperator", node);
         RETURN_IF_ERROR(cur_pipe->add_operator(operator_t));
         break;
     }
@@ -293,15 +297,15 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         auto new_pipe = add_pipeline();
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipe));
         OperatorBuilderPtr agg_sink = std::make_shared<AggSinkOperatorBuilder>(
-                next_operator_template_id(), "AggSinkOperator", agg_node, agg_ctx);
+                next_operator_builder_id(), "AggSinkOperator", agg_node, agg_ctx);
         RETURN_IF_ERROR(new_pipe->set_sink(agg_sink));
         if (agg_node->is_streaming_preagg()) {
             OperatorBuilderPtr agg_source = std::make_shared<PreAggSourceOperatorBuilder>(
-                    next_operator_template_id(), "PAggSourceOperator", agg_node, agg_ctx);
+                    next_operator_builder_id(), "PAggSourceOperator", agg_node, agg_ctx);
             RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         } else {
             OperatorBuilderPtr agg_source = std::make_shared<AggregationSourceOperatorBuilder>(
-                    next_operator_template_id(), "AggregationSourceOperator", agg_node);
+                    next_operator_builder_id(), "AggregationSourceOperator", agg_node);
             RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         }
         break;
@@ -312,11 +316,11 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipeline));
 
         OperatorBuilderPtr sort_sink = std::make_shared<SortSinkOperatorBuilder>(
-                next_operator_template_id(), "SortSinkOperatorBuilder", sort_node);
+                next_operator_builder_id(), "SortSinkOperator", sort_node);
         RETURN_IF_ERROR(new_pipeline->set_sink(sort_sink));
 
         OperatorBuilderPtr sort_source = std::make_shared<SortSourceOperatorBuilder>(
-                next_operator_template_id(), "SortSourceOperatorBuilder", sort_node);
+                next_operator_builder_id(), "SortSourceOperator", sort_node);
         RETURN_IF_ERROR(cur_pipe->add_operator(sort_source));
         break;
     }
@@ -341,19 +345,18 @@ Status PipelineFragmentContext::submit() {
 
 // construct sink operator
 Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
-    // TODO: Abstruct this code to simple the case when, do cast in Operator internal
     OperatorBuilderPtr sink_;
     switch (thrift_sink.type) {
     case TDataSinkType::DATA_STREAM_SINK: {
-        auto* exchange_sink = assert_cast<doris::vectorized::VDataStreamSender*>(_sink.get());
+        auto* exchange_sink = dynamic_cast<doris::vectorized::VDataStreamSender*>(_sink.get());
         sink_ = std::make_shared<ExchangeSinkOperatorBuilder>(
-                next_operator_template_id(), "ExchangeSinkOperator", nullptr, exchange_sink);
+                next_operator_builder_id(), "ExchangeSinkOperator", nullptr, exchange_sink, this);
         break;
     }
     case TDataSinkType::RESULT_SINK: {
-        auto* result_sink = assert_cast<doris::vectorized::VResultSink*>(_sink.get());
+        auto* result_sink = dynamic_cast<doris::vectorized::VResultSink*>(_sink.get());
         sink_ = std::make_shared<ResultSinkOperatorBuilder>(
-                next_operator_template_id(), "ResultSinkOperator", nullptr, result_sink);
+                next_operator_builder_id(), "ResultSinkOperator", nullptr, result_sink);
         break;
     }
     default:
@@ -365,6 +368,7 @@ Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
 void PipelineFragmentContext::close_a_pipeline() {
     ++_closed_pipeline_cnt;
     if (_closed_pipeline_cnt == _pipelines.size()) {
+        _runtime_profile->total_time_counter()->update(_fragment_watcher.elapsed_time());
         send_report(true);
         _exec_env->fragment_mgr()->remove_pipeline_context(shared_from_this());
     }
@@ -510,7 +514,7 @@ void PipelineFragmentContext::send_report(bool done) {
 
             if (!rpc_status.ok()) {
                 // we need to cancel the execution of this fragment
-                cancel(PPlanFragmentCancelReason::INTERNAL_ERROR, "rpc fail");
+                cancel(PPlanFragmentCancelReason::INTERNAL_ERROR, "report rpc fail");
                 return;
             }
             coord->reportExecStatus(res, params);
