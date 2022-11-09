@@ -104,6 +104,7 @@ void ScannerContext::return_free_block(vectorized::Block* block) {
 void ScannerContext::append_blocks_to_queue(const std::vector<vectorized::Block*>& blocks) {
     std::lock_guard<std::mutex> l(_transfer_lock);
     _blocks_queue.insert(_blocks_queue.end(), blocks.begin(), blocks.end());
+    _update_block_queue_empty();
     for (auto b : blocks) {
         _cur_bytes_in_queue += b->allocated_bytes();
     }
@@ -145,6 +146,7 @@ Status ScannerContext::get_block_from_queue(vectorized::Block** block, bool* eos
     if (!_blocks_queue.empty()) {
         *block = _blocks_queue.front();
         _blocks_queue.pop_front();
+        _update_block_queue_empty();
         _cur_bytes_in_queue -= (*block)->allocated_bytes();
         return Status::OK();
     } else {

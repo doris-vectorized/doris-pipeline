@@ -36,7 +36,7 @@ public:
     // We should make those method lock free.
     bool done() override { return _is_finished || _should_stop || _status_error; }
     bool can_finish() override { return _num_running_scanners == 0 && _num_scheduling_ctx == 0; }
-    bool empty_in_queue() override { return _blocks_queue.empty(); }
+    bool empty_in_queue() override { return _blocks_queue_empty; }
 };
 } // namespace pipeline
 } // namespace doris

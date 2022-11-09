@@ -147,6 +147,8 @@ private:
         return _cur_bytes_in_queue < _max_bytes_in_queue / 2;
     }
 
+    void _update_block_queue_empty() { _blocks_queue_empty = _blocks_queue.empty(); }
+
 protected:
     RuntimeState* _state;
     VScanNode* _parent;
@@ -166,6 +168,7 @@ protected:
     // And the upper scan node will be as a consumer to fetch blocks from this queue.
     // Should be protected by "_transfer_lock"
     std::list<vectorized::Block*> _blocks_queue;
+    std::atomic_bool _blocks_queue_empty = true;
     // Wait in get_block_from_queue(), by ScanNode.
     std::condition_variable _blocks_queue_added_cv;
     // Wait in clear_and_join(), by ScanNode.
