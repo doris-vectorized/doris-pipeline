@@ -329,6 +329,8 @@ public:
 
     bool enable_vectorized_exec() const { return _query_options.enable_vectorized_engine; }
 
+    bool enable_pipeline_exec() const { return _query_options.enable_pipeline_engine; }
+
     bool trim_tailing_spaces_for_external_table_query() const {
         return _query_options.trim_tailing_spaces_for_external_table_query;
     }
@@ -341,7 +343,7 @@ public:
         return _query_options.enable_enable_exchange_node_parallel_merge;
     }
 
-    segment_v2::CompressionTypePB fragement_transmission_compression_type() {
+    segment_v2::CompressionTypePB fragement_transmission_compression_type() const {
         if (_query_options.__isset.fragment_transmission_compression_codec) {
             if (_query_options.fragment_transmission_compression_codec == "lz4") {
                 return segment_v2::CompressionTypePB::LZ4;

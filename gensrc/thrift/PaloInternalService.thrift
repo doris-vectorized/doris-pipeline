@@ -177,6 +177,8 @@ struct TQueryOptions {
   49: optional bool skip_delete_predicate = false
 
   50: optional bool enable_new_shuffle_hash_method
+
+  51: optional bool enable_pipeline_engine = false
 }
     
 
