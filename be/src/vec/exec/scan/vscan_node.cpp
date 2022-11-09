@@ -21,6 +21,7 @@
 #include "exprs/hybrid_set.h"
 #include "runtime/runtime_filter_mgr.h"
 #include "vec/columns/column_const.h"
+#include "vec/exec/scan/pip_scanner_context.h"
 #include "vec/exec/scan/scanner_scheduler.h"
 #include "vec/exec/scan/vscanner.h"
 #include "vec/exprs/vcompound_pred.h"
@@ -175,9 +176,15 @@ Status VScanNode::_init_profile() {
 }
 
 Status VScanNode::_start_scanners(const std::list<VScanner*>& scanners) {
-    _scanner_ctx.reset(new ScannerContext(_state, this, _input_tuple_desc, _output_tuple_desc,
-                                          scanners, limit(),
-                                          _state->query_options().mem_limit / 20));
+    if (_state->enable_pipeline_exec()) {
+        _scanner_ctx.reset(new pipeline::PipScannerContext(_state, this, _input_tuple_desc,
+                                                           _output_tuple_desc, scanners, limit(),
+                                                           _state->query_options().mem_limit / 20));
+    } else {
+        _scanner_ctx.reset(new ScannerContext(_state, this, _input_tuple_desc, _output_tuple_desc,
+                                              scanners, limit(),
+                                              _state->query_options().mem_limit / 20));
+    }
     RETURN_IF_ERROR(_scanner_ctx->init());
     RETURN_IF_ERROR(_state->exec_env()->scanner_scheduler()->submit(_scanner_ctx.get()));
     return Status::OK();

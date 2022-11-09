@@ -561,8 +561,8 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
         set_pipe(params.params.fragment_instance_id, pipe);
         return Status::OK();
     } else {
-        if (params.query_options.__isset.enable_vectorized_engine &&
-            params.query_options.enable_vectorized_engine) {
+        if (params.query_options.__isset.enable_pipeline_engine &&
+            params.query_options.enable_pipeline_engine) {
             return exec_pipeline(params);
         } else {
             return exec_plan_fragment(params,

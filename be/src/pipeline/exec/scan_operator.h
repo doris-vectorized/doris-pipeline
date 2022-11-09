@@ -46,7 +46,7 @@ public:
     Status close(RuntimeState* state) override;
 
 private:
-    std::shared_ptr<doris::vectorized::ScannerContext> _scanner_ctx;
+    std::shared_ptr<vectorized::ScannerContext> _scanner_ctx;
     doris::vectorized::VScanNode* _scan_node;
     bool _eos;
 };

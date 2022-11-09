@@ -326,6 +326,7 @@ public:
         }
         return _query_options.be_exec_version;
     }
+    bool enable_pipeline_exec() const { return _query_options.enable_pipeline_engine; }
 
     bool trim_tailing_spaces_for_external_table_query() const {
         return _query_options.trim_tailing_spaces_for_external_table_query;
