@@ -61,8 +61,8 @@ Status VResultSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(prepare_exprs(state));
 
     // create sender
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
-                                                                   _buf_size, &_sender));
+    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(
+            state->fragment_instance_id(), _buf_size, &_sender, state->enable_pipeline_exec()));
 
     // create writer based on sink type
     switch (_sink_type) {
@@ -114,11 +114,13 @@ Status VResultSink::close(RuntimeState* state, Status exec_status) {
 
     // close sender, this is normal path end
     if (_sender) {
-        if (_writer) _sender->update_num_written_rows(_writer->get_written_rows());
+        if (_writer) {
+            _sender->update_num_written_rows(_writer->get_written_rows());
+        }
         _sender->close(final_status);
     }
     state->exec_env()->result_mgr()->cancel_at_time(
-            time(NULL) + config::result_buffer_cancelled_interval_time,
+            time(nullptr) + config::result_buffer_cancelled_interval_time,
             state->fragment_instance_id());
 
     VExpr::close(_output_vexpr_ctxs, state);

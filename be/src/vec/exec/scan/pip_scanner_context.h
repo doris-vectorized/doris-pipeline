@@ -39,6 +39,9 @@ public:
     bool done() override { return _is_finished || _should_stop || _status_error; }
     bool can_finish() override { return _num_running_scanners == 0 && _num_scheduling_ctx == 0; }
     bool empty_in_queue() override { return _blocks_queue_empty; }
+
+private:
+    std::atomic_bool _blocks_queue_empty = true;
 };
 } // namespace pipeline
 } // namespace doris
