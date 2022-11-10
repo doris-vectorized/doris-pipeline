@@ -176,15 +176,11 @@ struct TQueryOptions {
   // For debug purpose, skip delete predicates when reading data
   50: optional bool skip_delete_predicate = false
 
-<<<<<<< HEAD
   51: optional bool enable_new_shuffle_hash_method
 
   52: optional i32 be_exec_version = 0
-=======
-  50: optional bool enable_new_shuffle_hash_method
 
-  51: optional bool enable_pipeline_engine = false
->>>>>>> a8fa13622... add pipeline session variable && make can_read lock free
+  53: optional bool enable_pipeline_engine = false
 }
     
 
