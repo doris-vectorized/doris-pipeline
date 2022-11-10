@@ -147,7 +147,8 @@ private:
         return _cur_bytes_in_queue < _max_bytes_in_queue / 2;
     }
 
-    void _update_block_queue_empty() { _blocks_queue_empty = _blocks_queue.empty(); }
+    // do nothing here, we only do update on pip_scanner_context
+    virtual void _update_block_queue_empty() {}
 
 protected:
     RuntimeState* _state;
