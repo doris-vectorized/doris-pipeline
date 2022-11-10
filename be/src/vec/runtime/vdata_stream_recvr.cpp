@@ -50,9 +50,9 @@ Status VDataStreamRecvr::SenderQueue::get_batch(Block** next_block) {
         VLOG_ROW << "wait arrival fragment_instance_id=" << _recvr->fragment_instance_id()
                  << " node=" << _recvr->dest_node_id();
         // Don't count time spent waiting on the sender as active time.
-        CANCEL_SAFE_SCOPED_TIMER(_recvr->_data_arrival_timer, &_is_cancelled);
-        CANCEL_SAFE_SCOPED_TIMER(
-                _received_first_batch ? NULL : _recvr->_first_batch_wait_total_timer,
+        CANCEL_SAFE_SCOPED_TIMER_ATOMIC(_recvr->_data_arrival_timer, &_is_cancelled);
+        CANCEL_SAFE_SCOPED_TIMER_ATOMIC(
+                _received_first_batch ? nullptr : _recvr->_first_batch_wait_total_timer,
                 &_is_cancelled);
         _data_arrival_cv.wait(l);
     }
@@ -76,6 +76,7 @@ Status VDataStreamRecvr::SenderQueue::get_batch(Block** next_block) {
     _recvr->_num_buffered_bytes -= _block_queue.front().first;
     VLOG_ROW << "fetched #rows=" << result->rows();
     _block_queue.pop_front();
+    _update_block_queue_empty();
 
     _current_block.reset(result);
     *next_block = _current_block.get();
@@ -139,6 +140,7 @@ void VDataStreamRecvr::SenderQueue::add_block(const PBlock& pblock, int be_numbe
 
     VLOG_ROW << "added #rows=" << block->rows() << " batch_size=" << block_byte_size << "\n";
     _block_queue.emplace_back(block_byte_size, block);
+    _update_block_queue_empty();
     // if done is nullptr, this function can't delay this response
     if (done != nullptr && _recvr->exceeds_limit(block_byte_size)) {
         MonotonicStopWatch monotonicStopWatch;
@@ -175,6 +177,7 @@ void VDataStreamRecvr::SenderQueue::add_block(Block* block, bool use_move) {
 
     size_t block_size = nblock->bytes();
     _block_queue.emplace_back(block_size, nblock);
+    _update_block_queue_empty();
     _data_arrival_cv.notify_one();
 
     if (_recvr->exceeds_limit(block_size)) {
@@ -266,7 +269,7 @@ VDataStreamRecvr::VDataStreamRecvr(
         VDataStreamMgr* stream_mgr, const RowDescriptor& row_desc,
         const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
         bool is_merging, int total_buffer_limit, RuntimeProfile* profile,
-        std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr)
+        std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool enable_pipeline)
         : _mgr(stream_mgr),
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
@@ -276,7 +279,8 @@ VDataStreamRecvr::VDataStreamRecvr(
           _is_closed(false),
           _num_buffered_bytes(0),
           _profile(profile),
-          _sub_plan_query_statistics_recvr(sub_plan_query_statistics_recvr) {
+          _sub_plan_query_statistics_recvr(sub_plan_query_statistics_recvr),
+          _enable_pipeline(enable_pipeline) {
     // DataStreamRecvr may be destructed after the instance execution thread ends.
     _mem_tracker = std::make_unique<MemTracker>(
             "VDataStreamRecvr:" + print_id(_fragment_instance_id), _profile);
@@ -287,8 +291,12 @@ VDataStreamRecvr::VDataStreamRecvr(
     _sender_queues.reserve(num_queues);
     int num_sender_per_queue = is_merging ? 1 : num_senders;
     for (int i = 0; i < num_queues; ++i) {
-        SenderQueue* queue =
-                _sender_queue_pool.add(new SenderQueue(this, num_sender_per_queue, profile));
+        SenderQueue* queue = nullptr;
+        if (_enable_pipeline) {
+            queue = _sender_queue_pool.add(new PipSenderQueue(this, num_sender_per_queue, profile));
+        } else {
+            queue = _sender_queue_pool.add(new SenderQueue(this, num_sender_per_queue, profile));
+        }
         _sender_queues.push_back(queue);
     }
 

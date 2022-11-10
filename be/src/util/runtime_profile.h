@@ -48,10 +48,15 @@ namespace doris {
 #define ADD_CHILD_COUNTER(profile, name, type, parent) (profile)->add_counter(name, type, parent)
 #define ADD_CHILD_TIMER(profile, name, parent) (profile)->add_counter(name, TUnit::TIME_NS, parent)
 #define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
+#define SCOPED_TIMER_ATOMIC(c) \
+    ScopedTimer<MonotonicStopWatch, std::atomic_bool> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define SCOPED_CPU_TIMER(c) \
     ScopedTimer<ThreadCpuStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
     ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
+#define CANCEL_SAFE_SCOPED_TIMER_ATOMIC(c, is_cancelled)                                       \
+    ScopedTimer<MonotonicStopWatch, std::atomic_bool> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)( \
+            c, is_cancelled)
 #define SCOPED_RAW_TIMER(c)                                                                  \
     doris::ScopedRawTimer<doris::MonotonicStopWatch, int64_t> MACRO_CONCAT(SCOPED_RAW_TIMER, \
                                                                            __COUNTER__)(c)
@@ -531,10 +536,10 @@ private:
 // Utility class to update time elapsed when the object goes out of scope.
 // 'T' must implement the stopWatch "interface" (start,stop,elapsed_time) but
 // we use templates not to pay for virtual function overhead.
-template <class T>
+template <class T, typename Bool = bool>
 class ScopedTimer {
 public:
-    ScopedTimer(RuntimeProfile::Counter* counter, const bool* is_cancelled = nullptr)
+    ScopedTimer(RuntimeProfile::Counter* counter, const Bool* is_cancelled = nullptr)
             : _counter(counter), _is_cancelled(is_cancelled) {
         if (counter == nullptr) {
             return;
@@ -557,7 +562,9 @@ public:
 
     // Update counter when object is destroyed
     ~ScopedTimer() {
-        if (_counter == nullptr) return;
+        if (_counter == nullptr) {
+            return;
+        }
         _sw.stop();
         UpdateCounter();
     }
@@ -569,7 +576,7 @@ public:
 private:
     T _sw;
     RuntimeProfile::Counter* _counter;
-    const bool* _is_cancelled;
+    const Bool* _is_cancelled;
 };
 
 // Utility class to update time elapsed when the object goes out of scope.
