@@ -212,7 +212,7 @@ Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExecNode::prepare(RuntimeState* state) {
+Status ExecNode::prepare_self(RuntimeState* state) {
     DCHECK(_runtime_profile.get() != nullptr);
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _rows_returned_rate = runtime_profile()->add_derived_counter(
@@ -236,7 +236,11 @@ Status ExecNode::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_descriptor));
     }
     RETURN_IF_ERROR(vectorized::VExpr::prepare(_projections, state, _row_descriptor));
+    return Status::OK();
+}
 
+Status ExecNode::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(prepare_self(state));
     for (int i = 0; i < _children.size(); ++i) {
         RETURN_IF_ERROR(_children[i]->prepare(state));
     }
@@ -244,7 +248,7 @@ Status ExecNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExecNode::open(RuntimeState* state) {
+Status ExecNode::open_self(RuntimeState* state) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     if (_vconjunct_ctx_ptr) {
         RETURN_IF_ERROR((*_vconjunct_ctx_ptr)->open(state));
@@ -256,6 +260,10 @@ Status ExecNode::open(RuntimeState* state) {
     } else {
         return Status::OK();
     }
+}
+
+Status ExecNode::open(RuntimeState* state) {
+    return open_self(state);
 }
 
 Status ExecNode::reset(RuntimeState* state) {
@@ -274,22 +282,9 @@ Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {
     return Status::OK();
 }
 
-Status ExecNode::close(RuntimeState* state) {
-    if (_is_closed) {
-        return Status::OK();
-    }
-    _is_closed = true;
-
+void ExecNode::close_self(RuntimeState* state) {
     if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    }
-
-    Status result;
-    for (int i = 0; i < _children.size(); ++i) {
-        auto st = _children[i]->close(state);
-        if (result.ok() && !st.ok()) {
-            result = st;
-        }
     }
 
     if (_vconjunct_ctx_ptr) {
@@ -306,6 +301,22 @@ Status ExecNode::close(RuntimeState* state) {
     }
 
     runtime_profile()->add_to_span();
+}
+
+Status ExecNode::close(RuntimeState* state) {
+    if (_is_closed) {
+        return Status::OK();
+    }
+    _is_closed = true;
+
+    Status result;
+    for (int i = 0; i < _children.size(); ++i) {
+        auto st = _children[i]->close(state);
+        if (result.ok() && !st.ok()) {
+            result = st;
+        }
+    }
+    close_self(state);
 
     return result;
 }

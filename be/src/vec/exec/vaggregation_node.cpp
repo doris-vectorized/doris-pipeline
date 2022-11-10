@@ -285,12 +285,9 @@ void AggregationNode::_init_hash_method(std::vector<VExprContext*>& probe_exprs)
             _agg_data.init(AggregatedDataVariants::Type::serialized);
         }
     }
-} // namespace doris::vectorized
+}
 
-Status AggregationNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    SCOPED_CONSUME_MEM_TRACKER(mem_tracker());
+Status AggregationNode::prepare_profile(RuntimeState* state) {
     _build_timer = ADD_TIMER(runtime_profile(), "BuildTime");
     _serialize_key_timer = ADD_TIMER(runtime_profile(), "SerializeKeyTime");
     _exec_timer = ADD_TIMER(runtime_profile(), "ExecTime");
@@ -442,6 +439,15 @@ Status AggregationNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status AggregationNode::prepare(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+    RETURN_IF_ERROR(ExecNode::prepare(state));
+    SCOPED_CONSUME_MEM_TRACKER(mem_tracker());
+    RETURN_IF_ERROR(prepare_profile(state));
+    _child_return_rows = std::bind<int64_t>(&AggregationNode::get_child_return_rows, this);
+    return Status::OK();
+}
+
 Status AggregationNode::open(RuntimeState* state) {
     START_AND_SCOPE_SPAN(state->get_tracer(), span, "AggregationNode::open");
     SCOPED_TIMER(_runtime_profile->total_time_counter());
@@ -502,10 +508,10 @@ Status AggregationNode::get_next(RuntimeState* state, Block* block, bool* eos) {
                     _children[0]->get_next_span(), child_eos);
         } while (_preagg_block.rows() == 0 && !child_eos);
 
-        if (_preagg_block.rows() != 0) {
-            RETURN_IF_ERROR(_executor.pre_agg(&_preagg_block, block));
-        } else {
+        if (UNLIKELY(child_eos)) {
             RETURN_IF_ERROR(_executor.get_result(state, block, eos));
+        } else {
+            RETURN_IF_ERROR(_executor.pre_agg(&_preagg_block, block));
         }
         // pre stream agg need use _num_row_return to decide whether to do pre stream agg
         _num_rows_returned += block->rows();
@@ -591,7 +597,7 @@ Status AggregationNode::_get_without_key_result(RuntimeState* state, Block* bloc
             ColumnPtr ptr = std::move(columns[i]);
             // unless `count`, other aggregate function dispose empty set should be null
             // so here check the children row return
-            ptr = make_nullable(ptr, _children[0]->rows_returned() == 0);
+            ptr = make_nullable(ptr, _child_return_rows() == 0);
             columns[i] = std::move(*ptr).mutate();
         }
     }
@@ -606,7 +612,7 @@ Status AggregationNode::_serialize_without_key(RuntimeState* state, Block* block
     // in level two aggregation node should return NULL result
     //    level one aggregation node set `eos = true` return directly
     SCOPED_TIMER(_serialize_result_timer);
-    if (UNLIKELY(_children[0]->rows_returned() == 0)) {
+    if (UNLIKELY(_child_return_rows() == 0)) {
         *eos = true;
         return Status::OK();
     }
@@ -753,7 +759,7 @@ bool AggregationNode::_should_expand_preagg_hash_tables() {
                 // Compare the number of rows in the hash table with the number of input rows that
                 // were aggregated into it. Exclude passed through rows from this calculation since
                 // they were not in hash tables.
-                const int64_t input_rows = _children[0]->rows_returned();
+                const int64_t input_rows = _child_return_rows();
                 const int64_t aggregated_input_rows = input_rows - _num_rows_returned;
                 // TODO chenhao
                 //  const int64_t expected_input_rows = estimated_input_cardinality_ - num_rows_returned_;

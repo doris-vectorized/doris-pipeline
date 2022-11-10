@@ -45,9 +45,6 @@ public:
     // Status collect_query_statistics(QueryStatistics* statistics) override;
     void set_num_senders(int num_senders) { _num_senders = num_senders; }
 
-    Status constr_pipeline(pipeline::PipelineFragmentContext* fragment_context,
-                           pipeline::Pipeline* current_pipeline) override;
-
 private:
     int _num_senders;
     bool _is_merging;

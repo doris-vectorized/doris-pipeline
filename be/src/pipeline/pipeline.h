@@ -71,7 +71,7 @@ public:
 
     OperatorTemplate* sink() { return _sink.get(); }
 
-    Operators build_operators();
+    Status build_operators(Operators&);
 
 private:
     std::atomic<uint32_t> _complete_dependency;

@@ -45,7 +45,9 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
             ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
 
     // TODO pipeline 支持merge读
-    DCHECK(!_exchange_node->_is_merging);
+    if (_exchange_node->_is_merging) {
+        return Status::NotSupported("Now pipeline shuffle not support merging.");
+    }
     if (_exchange_node->_is_merging) {
         return Status::NotSupported("Not Implemented merging exchange source operator");
     }
@@ -60,7 +62,7 @@ Status ExchangeSourceOperator::open(RuntimeState* state) {
     //     ReceiveQueueSortCursorImpl::ReceiveQueueSortCursorImpl
     //       ReceiveQueueSortCursorImpl::has_next_block
     //         VDataStreamRecvr::SenderQueue::get_batch 阻塞（eof、出错、下一个block到来）
-    return _exchange_node->open(state);
+    return Operator::open(state);
 }
 
 bool ExchangeSourceOperator::can_read() {

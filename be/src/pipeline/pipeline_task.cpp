@@ -83,17 +83,13 @@ Status PipelineTask::execute(bool* eos) {
             break;
         }
         SCOPED_RAW_TIMER(&time_spent); // pipeline TODO 这个方法后会清空数据么？
-        _block->clear_column_data(
-                _root->operator_template()->exec_node()->row_desc().num_materialized_slots());
+        _block->clear_column_data(_root->row_desc().num_materialized_slots());
         auto* block = _block.get();
         LOG(INFO) << "llj log get block " << this;
         RETURN_IF_ERROR(_root->get_block(_state, block, eos));
         if (_block->rows() != 0 || *eos) {
             LOG(INFO) << "llj log get block end " << *eos << " rows:" << _block->rows() << " "
                       << this;
-            if (*eos) { // TODO pipeline eos不用频繁创建
-                block = nullptr;
-            }
             RETURN_IF_ERROR(_sink->sink(_state, block, *eos));
             if (*eos) { // 直接返回，scheduler会处理finish
                 break;
@@ -101,7 +97,7 @@ Status PipelineTask::execute(bool* eos) {
         }
     }
 
-    if (!_source->can_read() || !_sink->can_write()) {
+    if (!*eos && (!_source->can_read() || !_sink->can_write())) {
         set_state(BLOCKED);
     }
 

@@ -106,12 +106,13 @@ private:
 
     std::shared_ptr<QueryFragmentsCtx> _query_ctx;
     // TODO pipeline runtime filter
-    //    std::shared_ptr<RuntimeFilterMergeControllerEntity> _merge_controller_handler;
 
     // If set the true, this plan fragment will be executed only after FE send execution start rpc.
     bool _need_wait_execution_trigger = false;
 
     Status _create_sink(const TDataSink& t_data_sink);
+    Status _build_pipelines(ExecNode*, PipelinePtr);
+    Status _build_pipeline_tasks(const doris::TExecPlanFragmentParams& request);
 };
 } // namespace pipeline
 } // namespace doris

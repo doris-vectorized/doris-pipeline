@@ -17,10 +17,16 @@
 
 #include "pipeline_fragment_context.h"
 
+#include "exec/agg_context.h"
+#include "exec/aggregation_sink_operator.h"
 #include "exec/data_sink.h"
+#include "exec/exchange_sink_operator.h"
+#include "exec/exchange_source_operator.h"
+#include "exec/final_aggregation_source_operator.h"
+#include "exec/olap_scan_operator.h"
+#include "exec/pre_aggregation_source_operator.h"
+#include "exec/result_sink_operator.h"
 #include "exec/scan_node.h"
-#include "pipeline/exec/exchange_sink_operator.h"
-#include "pipeline/exec/result_sink_operator.h"
 #include "pipeline_task.h"
 #include "runtime/fragment_mgr.h"
 #include "task_scheduler.h"
@@ -28,6 +34,7 @@
 #include "vec/exec/scan/new_file_scan_node.h"
 #include "vec/exec/scan/new_olap_scan_node.h"
 #include "vec/exec/scan/vscan_node.h"
+#include "vec/exec/vaggregation_node.h"
 #include "vec/exec/vexchange_node.h"
 #include "vec/runtime/vdata_stream_mgr.h"
 #include "vec/sink/vdata_stream_sender.h"
@@ -195,26 +202,25 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
 
-    _root_pipeline = fragment_context->add_pipeline();
-    RETURN_IF_ERROR(_root_plan->constr_pipeline(fragment_context, _root_pipeline.get()));
-
-    // 3. 如果存在sink，则将其转化为operator，并放入pipeline
     if (request.fragment.__isset.output_sink) {
         RETURN_IF_ERROR(
                 DataSink::create_data_sink(_runtime_state->obj_pool(), request.fragment.output_sink,
                                            request.fragment.output_exprs, params,
                                            _root_plan->row_desc(), true, &_sink, *desc_tbl));
-
-        // 不需要prepare
-        //        RETURN_IF_ERROR(sink->prepare(_runtime_state));
-        // 没有prepare，是没有profile的
-        //        RuntimeProfile* sink_profile = sink->profile();
-        //        if (sink_profile != nullptr) {
-        //            _runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
-        //        }
-        RETURN_IF_ERROR(_create_sink(request.fragment.output_sink));
     }
 
+    _root_pipeline = fragment_context->add_pipeline();
+    RETURN_IF_ERROR(_build_pipelines(_root_plan, _root_pipeline));
+    if (_sink) {
+        RETURN_IF_ERROR(_create_sink(request.fragment.output_sink));
+    }
+    RETURN_IF_ERROR(_build_pipeline_tasks(request));
+    _prepared = true;
+    return Status::OK();
+}
+
+Status PipelineFragmentContext::_build_pipeline_tasks(
+        const doris::TExecPlanFragmentParams& request) {
     for (auto& pipeline : _pipelines) {
         RETURN_IF_ERROR(pipeline->prepare(_runtime_state.get()));
     }
@@ -222,34 +228,83 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     for (PipelinePtr& pipeline : _pipelines) {
         // if sink
         auto sink = pipeline->sink()->build_operator();
-        RETURN_IF_ERROR(sink->init(nullptr, _runtime_state.get()));
+        RETURN_IF_ERROR(sink->init(pipeline->sink()->exec_node(), _runtime_state.get()));
         // TODO pipeline 1 这个设计要重新考虑，把Operator和exec_node解绑，或者增加新的接口
-        auto& thrift_sink = request.fragment.output_sink;
-        switch (thrift_sink.type) {
-        case TDataSinkType::DATA_STREAM_SINK: {
+        auto& sink_ = *(sink);
+        if (typeid(sink_) == typeid(ExchangeSinkOperator)) {
             auto* exchange_sink = dynamic_cast<ExchangeSinkOperator*>(sink.get());
-            RETURN_IF_ERROR(exchange_sink->init(thrift_sink));
-            break;
-        }
-        case TDataSinkType::RESULT_SINK: {
+            RETURN_IF_ERROR(exchange_sink->init(request.fragment.output_sink));
+        } else if (typeid(sink_) == typeid(ResultSinkOperator)) {
             auto* result_sink = dynamic_cast<ResultSinkOperator*>(sink.get());
-            RETURN_IF_ERROR(result_sink->init(thrift_sink));
-            break;
-        }
-        default:
-            return Status::InternalError("Unsuported sink type in pipeline: {}", thrift_sink.type);
+            RETURN_IF_ERROR(result_sink->init(request.fragment.output_sink));
         }
 
-        auto operators = pipeline->build_operators();
-        _tasks.emplace_back(std::make_unique<PipelineTask>(pipeline, 0, _runtime_state.get(),
-                                                           operators, sink, this));
+        Operators operators;
+        RETURN_IF_ERROR(pipeline->build_operators(operators));
+        auto task = std::make_unique<PipelineTask>(pipeline, 0, _runtime_state.get(), operators,
+                                                   sink, this);
+        sink->set_child(task->get_root());
+        _tasks.emplace_back(std::move(task));
     }
 
     for (auto& task : _tasks) {
         RETURN_IF_ERROR(task->prepare(_runtime_state.get()));
     }
+    return Status::OK();
+}
 
-    _prepared = true;
+Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur_pipe) {
+    auto* fragment_context = this;
+    auto node_type = node->type();
+    switch (node_type) {
+    // for source
+    case TPlanNodeType::OLAP_SCAN_NODE: {
+        // Starrocks中加了一个OlapScanPrepareOperatorFactory和NoopSinkOperatorFactory的pipeline
+        // OlapScanPrepareOperatorFactory和OlapScanOperatorFactory之间靠OlapScanContextFactoryPtr联系在一起
+        // OlapScanPrepareOperator和OlapScanOperator共享OlapScanContex只是为了使用OlapScanContex的标注依赖和管理声明周期的作用
+        // OlapScanPrepareOperator主要用来做open tablet
+        // 但中间还有一个NoopSinkOperatorFactory算子，可能是为了适配pipeline的调度而生成的
+        auto* new_olap_scan_node = dynamic_cast<vectorized::NewOlapScanNode*>(node);
+        if (!new_olap_scan_node) {
+            return Status::InternalError("Just suppourt NewOlapScanNode in pipeline");
+        }
+        OperatorTemplatePtr operator_t = std::make_shared<OlapScanOperatorTemplate>(
+                fragment_context->next_operator_template_id(), "OlapScanOperatorTemplate",
+                new_olap_scan_node);
+        RETURN_IF_ERROR(cur_pipe->set_source(operator_t));
+        break;
+    }
+    case TPlanNodeType::EXCHANGE_NODE: {
+        OperatorTemplatePtr operator_t = std::make_shared<ExchangeSourceOperatorTemplate>(
+                next_operator_template_id(), "ExchangeOpertorT", node);
+        RETURN_IF_ERROR(cur_pipe->set_source(operator_t));
+        break;
+    }
+    case TPlanNodeType::AGGREGATION_NODE: {
+        auto* agg_node = dynamic_cast<vectorized::AggregationNode*>(node);
+        auto agg_ctx = std::make_shared<AggContext>();
+        auto new_pipe = add_pipeline();
+        RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipe));
+        OperatorTemplatePtr agg_sink = std::make_shared<AggSinkOperatorTemplate>(
+                next_operator_template_id(), "AggSinkOperatorTemplate", agg_node, agg_ctx);
+        RETURN_IF_ERROR(new_pipe->set_sink(agg_sink));
+        if (agg_node->is_streaming_preagg()) {
+            OperatorTemplatePtr agg_source = std::make_shared<PreAggSourceOperatorTemplate>(
+                    next_operator_template_id(), "PAggSourceOperatorTemplate", agg_node, agg_ctx);
+            RETURN_IF_ERROR(cur_pipe->set_source(agg_source));
+        } else {
+            // 如果这里去掉依赖，要修改agg sink的can_read方法
+            cur_pipe->add_dependency(new_pipe);
+            OperatorTemplatePtr agg_source = std::make_shared<FinalAggSourceOperatorTemplate>(
+                    next_operator_template_id(), "FinalAggSourceOperatorT", agg_node);
+            RETURN_IF_ERROR(cur_pipe->set_source(agg_source));
+        }
+        break;
+    }
+    default:
+        return Status::InternalError("Unsupported exec type in pipeline: {}",
+                                     print_plan_node_type(node_type));
+    }
     return Status::OK();
 }
 

@@ -38,6 +38,7 @@ ExchangeSinkOperator::~ExchangeSinkOperator() = default;
 
 Status ExchangeSinkOperator::init(const ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
+    _state = state;
     return Status::OK();
 }
 
@@ -190,7 +191,7 @@ Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
         //        } else {
 
         std::shared_ptr<PBlock> p_block;
-        if (block) {
+        if (block && block->rows() > 0) {
             p_block.reset(new PBlock());
             RETURN_IF_ERROR(serialize_block(block, p_block.get(), _channels.size()));
         }
@@ -200,7 +201,7 @@ Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
         //        }
     } else if (_part_type == TPartitionType::RANDOM) {
         std::shared_ptr<PBlock> p_block;
-        if (block) {
+        if (block && block->rows() > 0) {
             p_block.reset(new PBlock());
             RETURN_IF_ERROR(serialize_block(block, p_block.get(), _channels.size()));
         }
