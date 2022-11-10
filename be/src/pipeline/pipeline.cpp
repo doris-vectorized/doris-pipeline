@@ -29,17 +29,18 @@ Status Pipeline::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Operators Pipeline::build_operators() {
-    Operators operators;
+Status Pipeline::build_operators(Operators& operators) {
+    OperatorPtr pre;
     for (auto& operator_t : _operators) {
         auto o = operator_t->build_operator();
-        auto s = o->init(operator_t->exec_node(), _context->get_runtime_state());
-        if (!s.ok()) {
-            // TODO pipeline 1 返回状态
+        RETURN_IF_ERROR(o->init(operator_t->exec_node(), _context->get_runtime_state()));
+        if (pre) {
+            o->set_child(pre);
         }
-        operators.emplace_back(std::move(o));
+        operators.emplace_back(o);
+        pre = std::move(o);
     }
-    return operators;
+    return Status::OK();
 }
 
 void Pipeline::close(RuntimeState* state) {

@@ -34,6 +34,12 @@ class TPlanNode;
 class DescriptorTbl;
 class MemPool;
 
+namespace pipeline {
+class AggSinkOperator;
+class FinalAggSourceOperator;
+class PreAggSourceOperator;
+} // namespace pipeline
+
 namespace vectorized {
 class VExprContext;
 
@@ -742,14 +748,19 @@ public:
 
     AggregationNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~AggregationNode();
-    virtual Status init(const TPlanNode& tnode, RuntimeState* state = nullptr);
-    virtual Status prepare(RuntimeState* state);
-    virtual Status open(RuntimeState* state);
-    virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos);
-    virtual Status get_next(RuntimeState* state, Block* block, bool* eos);
-    virtual Status close(RuntimeState* state);
+    virtual Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
+    Status prepare_profile(RuntimeState* state);
+    virtual Status prepare(RuntimeState* state) override;
+    virtual Status open(RuntimeState* state) override;
+    virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
+    virtual Status get_next(RuntimeState* state, Block* block, bool* eos) override;
+    virtual Status close(RuntimeState* state) override;
+    bool is_streaming_preagg() { return _is_streaming_preagg; }
 
 private:
+    friend class pipeline::AggSinkOperator;
+    friend class pipeline::FinalAggSourceOperator;
+    friend class pipeline::PreAggSourceOperator;
     // group by k1,k2
     std::vector<VExprContext*> _probe_expr_ctxs;
     // left / full join will change the key nullable make output/input solt
@@ -1048,6 +1059,10 @@ private:
     };
 
     MemoryRecord _mem_usage_record;
+
+    using child_return_rows_func = std::function<int64_t()>;
+    int64_t get_child_return_rows() { return _children[0]->rows_returned(); }
+    child_return_rows_func _child_return_rows;
 };
 } // namespace vectorized
 } // namespace doris

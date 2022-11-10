@@ -90,10 +90,14 @@ public:
     // If overridden in subclass, must first call superclass's prepare().
     virtual Status prepare(RuntimeState* state);
 
+    Status prepare_self(RuntimeState*);
+
     // Performs any preparatory work prior to calling get_next().
     // Can be called repeatedly (after calls to close()).
     // Caller must not be holding any io buffers. This will cause deadlock.
     virtual Status open(RuntimeState* state);
+
+    Status open_self(RuntimeState* state);
 
     // Retrieves rows and returns them via row_batch. Sets eos to true
     // if subsequent calls will not retrieve any more rows.
@@ -145,6 +149,8 @@ public:
     // close() on the children. To ensure that close() is called on the entire plan tree,
     // each implementation should start out by calling the default implementation.
     virtual Status close(RuntimeState* state);
+
+    void close_self(RuntimeState* state);
 
     // Creates exec node tree from list of nodes contained in plan via depth-first
     // traversal. All nodes are placed in pool.
@@ -213,11 +219,7 @@ public:
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
 
-    // 生成Operator，添加到current_pipeline中。
-    virtual Status constr_pipeline(pipeline::PipelineFragmentContext*, pipeline::Pipeline*) {
-        return Status::NotSupported("Not support pipeline for type {},{} ", _type,
-                                    typeid(*this).name());
-    }
+    ExecNode* child(int i) { return _children[i]; }
 
 protected:
     friend class DataSink;
@@ -343,8 +345,6 @@ protected:
     // Set to true if this is a vectorized exec node.
     bool _is_vec = false;
 
-    ExecNode* child(int i) { return _children[i]; }
-
     bool is_closed() const { return _is_closed; }
 
     // TODO(zc)
@@ -382,6 +382,7 @@ protected:
     virtual Status QueryMaintenance(RuntimeState* state, const std::string& msg) WARN_UNUSED_RESULT;
 
 private:
+    friend class pipeline::Operator;
     bool _is_closed;
 };
 

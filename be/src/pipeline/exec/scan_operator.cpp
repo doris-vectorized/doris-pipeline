@@ -47,7 +47,11 @@ Status ScanOperator::prepare(RuntimeState* state) {
             state->desc_tbl().get_tuple_descriptor(_scan_node->_input_tuple_id);
     _scan_node->_output_tuple_desc =
             state->desc_tbl().get_tuple_descriptor(_scan_node->_output_tuple_id);
+    return Status::OK();
+}
 
+Status ScanOperator::open(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::open(state));
     RETURN_IF_ERROR(_scan_node->_acquire_runtime_filter(false)); // 在次之前，
     RETURN_IF_ERROR(_scan_node->_process_conjuncts());
 
@@ -59,20 +63,17 @@ Status ScanOperator::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(_scan_node->_start_scanners(scanners));
         _scanner_ctx = _scan_node->_scanner_ctx;
     }
-    return Status::OK();
-}
 
-Status ScanOperator::open(RuntimeState* state) {
     return Status::OK();
 }
 
 bool ScanOperator::can_read() {
-    if (_eos) {
+    if (_eos || !_scanner_ctx || _scanner_ctx->done() || _scanner_ctx->can_finish()) {
+        // _eos:需要结束
+        // !_scanner_ctx:需要open
+        // _scanner_ctx->done():需要结束
+        // _scanner_ctx->can_finish():需要触发scan调度
         return true;
-    } else if (_scanner_ctx->done()) {
-        return true;
-    } else if (_scanner_ctx->can_finish()) {
-        return true; // 需要触发调度
     } else {
         return !_scanner_ctx->empty_in_queue(); // 有数据了
     }

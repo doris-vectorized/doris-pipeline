@@ -96,9 +96,6 @@ public:
     // 释放资源，不能阻塞，不能中断，
     virtual Status close(RuntimeState* state);
 
-    // 等runtime filter
-    virtual bool is_ready() { return true; }
-
     Status set_child(OperatorPtr child) {
         if (is_source()) {
             return Status::InternalError("source can not has child.");
@@ -152,17 +149,21 @@ public:
 
     const OperatorTemplate* operator_template() const { return _operator_template; }
 
+    const RowDescriptor& row_desc();
+
+    int64_t rows_returned() const { return _num_rows_returned; }
+
 protected:
     std::unique_ptr<MemTracker> _mem_tracker;
 
-    const OperatorTemplate* _operator_template;
+    OperatorTemplate* _operator_template;
     // source has no child
     // if an operator is not source, it will get data from its child.
     OperatorPtr _child;
 
     std::unique_ptr<RuntimeProfile> _runtime_profile;
-    size_t _num_rows_returned;
-    size_t _limit;
+    int64_t _num_rows_returned;
+    int64_t _limit;
 
 private:
     bool _is_closed = false;
@@ -170,10 +171,12 @@ private:
 
 class OperatorTemplate {
 public:
-    OperatorTemplate(int32_t id, const std::string& name, ExecNode* exec_node)
+    OperatorTemplate(int32_t id, const std::string& name, ExecNode* exec_node = nullptr)
             : _id(id), _name(name), _related_exec_node(exec_node) {}
 
     virtual ~OperatorTemplate() = default;
+
+    virtual OperatorPtr build_operator() = 0;
 
     virtual bool is_sink() const { return false; }
     virtual bool is_source() const { return false; }
@@ -185,56 +188,22 @@ public:
 
     std::string get_name() const { return _name; }
 
-    //    // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
-    //    // to bound its runtime in-filters.
-    //    void prepare_runtime_in_filters(RuntimeState* state) {
-    //        // TODO(satanson): at present, prepare_runtime_in_filters is called in the PipelineDriverPoller thread sequentially,
-    //        //  std::call_once's cost can be ignored, in the future, if mulitple PipelineDriverPollers are employed to dectect
-    //        //  and wake blocked driver, std::call_once is sound but may be blocked.
-    //        std::call_once(_prepare_runtime_in_filters_once, [this, state]() { this->_prepare_runtime_in_filters(state); });
-    //    }
-
-    //    const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
-
     RuntimeState* runtime_state() { return _state; }
 
-    //    RowDescriptor* row_desc() { return &_row_desc; }
+    const RowDescriptor& row_desc() { return _related_exec_node->row_desc(); }
 
-    virtual OperatorPtr build_operator() = 0;
-
-    const ExecNode* exec_node() const { return _related_exec_node; }
+    ExecNode* exec_node() const { return _related_exec_node; }
 
     int32_t id() const { return _id; }
 
 protected:
-    //    void _prepare_runtime_in_filters(RuntimeState* state) {
-    //        auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
-    //        for (auto& holder : holders) {
-    //            DCHECK(holder->is_ready());
-    //            auto* collector = holder->get_collector();
-    //
-    //            collector->rewrite_in_filters(_tuple_slot_mappings);
-    //
-    //            auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
-    //            for (auto* filter : in_filters) {
-    //                filter->prepare(state);
-    //                filter->open(state);
-    //                _runtime_in_filters.push_back(filter);
-    //            }
-    //        }
-    //    }
-
     const int32_t _id;
     const std::string _name;
-    const ExecNode* _related_exec_node;
+    ExecNode* _related_exec_node;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    //    std::vector<TupleId> _tuple_ids;
-    // a set of TPlanNodeIds of HashJoinNode who generates Local RF that take effects on this operator.
-    //    std::once_flag _prepare_runtime_in_filters_once;
-    //    RowDescriptor _row_desc;
-    //    std::vector<SlotId> _filter_null_value_columns;
 
     RuntimeState* _state = nullptr;
+    bool _is_closed = false;
 };
 
 using OperatorTemplatePtr = std::shared_ptr<OperatorTemplate>;

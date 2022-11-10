@@ -38,9 +38,6 @@ public:
 
     std::string get_name() override;
 
-    Status constr_pipeline(pipeline::PipelineFragmentContext* fragment_context,
-                           pipeline::Pipeline* current_pipeline) override;
-
 protected:
     Status _init_profile() override;
     Status _process_conjuncts() override;

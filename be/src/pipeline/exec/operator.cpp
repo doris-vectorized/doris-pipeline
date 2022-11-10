@@ -20,7 +20,7 @@
 namespace doris::pipeline {
 
 Operator::Operator(OperatorTemplate* operator_template)
-        : _operator_template(operator_template), _is_closed(false) {}
+        : _operator_template(operator_template), _limit(-1), _is_closed(false) {}
 
 bool Operator::is_sink() const {
     return _operator_template->is_sink();
@@ -32,7 +32,6 @@ bool Operator::is_source() const {
 
 Status Operator::init(const ExecNode* exec_node, RuntimeState* state) {
     _runtime_profile.reset(new RuntimeProfile("Operator"));
-    // TODO pipeline init common profile
     _runtime_profile->set_metadata(_operator_template->id());
     if (exec_node && exec_node->limit() >= 0) {
         _limit = exec_node->limit();
@@ -43,10 +42,18 @@ Status Operator::init(const ExecNode* exec_node, RuntimeState* state) {
 Status Operator::prepare(RuntimeState* state) {
     _mem_tracker = std::make_unique<MemTracker>("Operator:" + _runtime_profile->name(),
                                                 _runtime_profile.get());
+    // for poc
+    if (_operator_template->exec_node()) {
+        RETURN_IF_ERROR(_operator_template->exec_node()->prepare_self(state));
+    }
     return Status::OK();
 }
 
 Status Operator::open(RuntimeState* state) {
+    // for poc
+    if (_operator_template->exec_node()) {
+        RETURN_IF_ERROR(_operator_template->exec_node()->open_self(state));
+    }
     return Status::OK();
 }
 
@@ -56,8 +63,8 @@ Status Operator::close(RuntimeState* state) {
         return Status::OK();
     }
     _is_closed = true;
-    if (_child) {
-        RETURN_IF_ERROR(_child->close(state));
+    if (_operator_template->exec_node()) {
+        _operator_template->exec_node()->close_self(state);
     }
     return Status::OK();
 }
@@ -70,6 +77,10 @@ void Operator::reached_limit(vectorized::Block* block, bool* eos) {
     _num_rows_returned += block->rows();
 }
 
+const RowDescriptor& Operator::row_desc() {
+    return _operator_template->row_desc();
+}
+
 /////////////////////////////////////// OperatorTemplate ////////////////////////////////////////////////////////////
 
 Status OperatorTemplate::prepare(doris::RuntimeState* state) {
@@ -79,7 +90,10 @@ Status OperatorTemplate::prepare(doris::RuntimeState* state) {
 }
 
 void OperatorTemplate::close(doris::RuntimeState* state) {
-    // return Status::OK();
+    if (_is_closed) {
+        return;
+    }
+    _is_closed = true;
 }
 
 } // namespace doris::pipeline

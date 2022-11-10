@@ -379,19 +379,4 @@ bool NewOlapScanNode::_is_key_column(const std::string& key_name) {
     return res != _olap_scan_node.key_column_name.end();
 }
 
-Status NewOlapScanNode::constr_pipeline(pipeline::PipelineFragmentContext* fragment_context,
-                                        pipeline::Pipeline* current_pipeline) {
-    // 创建 olap scan operator，将scan range传给它。
-
-    // Starrocks中加了一个OlapScanPrepareOperatorFactory和NoopSinkOperatorFactory的pipeline
-    // OlapScanPrepareOperatorFactory和OlapScanOperatorFactory之间靠OlapScanContextFactoryPtr联系在一起
-    // OlapScanPrepareOperator和OlapScanOperator共享OlapScanContex只是为了使用OlapScanContex的标注依赖和管理声明周期的作用
-    // OlapScanPrepareOperator主要用来做open tablet
-    // 但中间还有一个NoopSinkOperatorFactory算子，可能是为了适配pipeline的调度而生成的
-    pipeline::OperatorTemplatePtr operator_t = std::make_shared<pipeline::OlapScanOperatorTemplate>(
-            fragment_context->next_operator_template_id(), "OlapScanOperatorTemplate", this);
-    current_pipeline->set_source(operator_t);
-    return Status::OK();
-}
-
 }; // namespace doris::vectorized

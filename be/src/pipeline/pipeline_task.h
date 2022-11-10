@@ -39,8 +39,8 @@ public:
             : _index(index),
               _pipeline(pipeline),
               _operators(operators),
-              _source(_operators.back()),
-              _root(_operators.front()),
+              _source(_operators.front()),
+              _root(_operators.back()),
               _sink(sink),
               _prepared(false),
               _opened(false),
@@ -56,16 +56,6 @@ public:
 
     // 释放资源,可能是cancel
     Status close();
-
-    // TODO pipeline 1
-    //    void cancel() {
-    //        if (_canceled) {
-    //            return;
-    //        }
-    //
-    //        _canceled = true;
-    //    }
-
     PipelineTaskState get_state() { return _cur_state; }
 
     void set_state(PipelineTaskState state) {
@@ -98,6 +88,7 @@ public:
     bool has_dependency();
 
     uint32_t index() { return _index; }
+    OperatorPtr get_root() { return _root; }
 
 private:
     Status open();
