@@ -169,7 +169,6 @@ protected:
     // And the upper scan node will be as a consumer to fetch blocks from this queue.
     // Should be protected by "_transfer_lock"
     std::list<vectorized::Block*> _blocks_queue;
-    std::atomic_bool _blocks_queue_empty = true;
     // Wait in get_block_from_queue(), by ScanNode.
     std::condition_variable _blocks_queue_added_cv;
     // Wait in clear_and_join(), by ScanNode.
