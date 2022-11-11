@@ -1201,11 +1201,8 @@ public class SessionVariable implements Serializable, Writable {
         tResult.setIsReportSuccess(enableProfile);
         tResult.setCodegenLevel(codegenLevel);
         tResult.setEnableVectorizedEngine(enableVectorizedEngine);
-<<<<<<< HEAD
         tResult.setBeExecVersion(Config.be_exec_version);
-=======
         tResult.setEnablePipelineEngine(enablePipelineEngine);
->>>>>>> a8fa13622... add pipeline session variable && make can_read lock free
         tResult.setReturnObjectDataAsBinary(returnObjectDataAsBinary);
         tResult.setTrimTailingSpacesForExternalTableQuery(trimTailingSpacesForExternalTableQuery);
 
