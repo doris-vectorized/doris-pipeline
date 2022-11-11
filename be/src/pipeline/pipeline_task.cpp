@@ -21,13 +21,25 @@
 
 namespace doris::pipeline {
 
+void PipelineTask::_init_profile() {
+    std::stringstream ss;
+    ss << "PipelineTask" << " (index=" << _index << ")";
+    auto* task_profile = new RuntimeProfile(ss.str());
+    _parent_profile->add_child(task_profile, true, nullptr);
+    _task_profile.reset(task_profile);
+    _sink_timer = ADD_TIMER(_task_profile, "SinkTime");
+    _get_block_timer = ADD_TIMER(_task_profile, "GetBlockTime");
+}
+
 Status PipelineTask::prepare(RuntimeState* state) {
-    if (_sink) {
-        RETURN_IF_ERROR(_sink->prepare(state));
-    }
+    DCHECK(_sink);
+    _init_profile();
+    RETURN_IF_ERROR(_sink->prepare(state));
     for (auto& o : _operators) {
         RETURN_IF_ERROR(o->prepare(state));
     }
+    _task_profile->add_child(_sink->runtime_profile(), true, nullptr);
+    RETURN_IF_ERROR(_root->link_profile(_task_profile.get()));
     _block.reset(new doris::vectorized::Block());
     _prepared = true;
     return Status::OK();
@@ -45,8 +57,7 @@ bool PipelineTask::has_dependency() {
         return true;
     }
     // fe还未开启查询
-    if (!_state->get_query_fragments_ctx()
-                 ->is_ready_to_execute()) { // TODO pipeline config::s_ready_to_execute
+    if (!_state->get_query_fragments_ctx()->is_ready_to_execute()) {
         return true;
     }
 
@@ -69,6 +80,7 @@ Status PipelineTask::open() {
 }
 
 Status PipelineTask::execute(bool* eos) {
+    SCOPED_TIMER(_task_profile->total_time_counter());
     int64_t time_spent = 0;
     // 检查状态一定要是runnable
     *eos = false;
@@ -76,22 +88,22 @@ Status PipelineTask::execute(bool* eos) {
         SCOPED_RAW_TIMER(&time_spent);
         RETURN_IF_ERROR(open());
     }
-    LOG(INFO) << "start while " << this;
     while (_source->can_read() && _sink->can_write() && !_fragment_context->is_canceled()) {
-        // TODO sr
+        // TODO pipeline sr
         if (time_spent > 100'000'000L) {
             break;
         }
         SCOPED_RAW_TIMER(&time_spent); // pipeline TODO 这个方法后会清空数据么？
         _block->clear_column_data(_root->row_desc().num_materialized_slots());
         auto* block = _block.get();
-        LOG(INFO) << "llj log get block " << this;
-        RETURN_IF_ERROR(_root->get_block(_state, block, eos));
+        {
+            SCOPED_TIMER(_get_block_timer);
+                RETURN_IF_ERROR(_root->get_block(_state, block, eos));
+        }
         if (_block->rows() != 0 || *eos) {
-            LOG(INFO) << "llj log get block end " << *eos << " rows:" << _block->rows() << " "
-                      << this;
+            SCOPED_TIMER(_sink_timer);
             RETURN_IF_ERROR(_sink->sink(_state, block, *eos));
-            if (*eos) { // 直接返回，scheduler会处理finish
+            if (*eos) {
                 break;
             }
         }

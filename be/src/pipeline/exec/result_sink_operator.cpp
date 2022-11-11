@@ -42,10 +42,13 @@ bool ResultSinkOperator::can_write() {
 }
 
 Status ResultSinkOperator::sink(RuntimeState* state, vectorized::Block* block, bool eos) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     if (!block) {
-        LOG(INFO) << "block is null, eos should invoke in finalize.";
-        DCHECK(eos);
+        DCHECK(eos) << "block is null, eos should invoke in finalize.";
         return Status::OK();
+    } else {
+        _num_rows_returned += block->rows();
+        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
     return _sink->send(state, block);
 }

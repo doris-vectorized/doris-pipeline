@@ -153,6 +153,9 @@ public:
 
     int64_t rows_returned() const { return _num_rows_returned; }
 
+    Status link_profile(RuntimeProfile* parent);
+    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+
 protected:
     std::unique_ptr<MemTracker> _mem_tracker;
 
@@ -163,6 +166,11 @@ protected:
 
     std::unique_ptr<RuntimeProfile> _runtime_profile;
     int64_t _num_rows_returned;
+    RuntimeProfile::Counter* _rows_returned_counter = nullptr;
+    RuntimeProfile::Counter* _rows_returned_rate = nullptr;
+    // TODO pipeline Account for peak memory used by this operator
+    RuntimeProfile::Counter* _memory_used_counter = nullptr;
+
     int64_t _limit;
 
 private:

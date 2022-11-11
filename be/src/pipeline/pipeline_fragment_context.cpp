@@ -27,10 +27,14 @@
 #include "exec/pre_aggregation_source_operator.h"
 #include "exec/result_sink_operator.h"
 #include "exec/scan_node.h"
+#include "gen_cpp/HeartbeatService_types.h"
+#include "gen_cpp/FrontendService.h"
 #include "pipeline_task.h"
+#include "runtime/client_cache.h"
 #include "runtime/fragment_mgr.h"
 #include "task_scheduler.h"
 #include "util/container_util.hpp"
+#include "util/thrift_util.h"
 #include "vec/exec/scan/new_file_scan_node.h"
 #include "vec/exec/scan/new_olap_scan_node.h"
 #include "vec/exec/scan/vscan_node.h"
@@ -40,20 +44,24 @@
 #include "vec/sink/vdata_stream_sender.h"
 #include "vec/sink/vresult_sink.h"
 
+using apache::thrift::transport::TTransportException;
+using apache::thrift::TException;
+
 namespace doris::pipeline {
 
 PipelineFragmentContext::PipelineFragmentContext(const TUniqueId& query_id,
-                                                 const TUniqueId& instance_id,
+                                                 const TUniqueId& instance_id, int backend_num,
                                                  std::shared_ptr<QueryFragmentsCtx> query_ctx,
                                                  ExecEnv* exec_env)
         : _query_id(query_id),
           _fragment_instance_id(instance_id),
+          _backend_num(backend_num),
           _exec_env(exec_env),
           _cancel_reason(PPlanFragmentCancelReason::INTERNAL_ERROR),
           _closed_pipeline_cnt(0),
           _query_ctx(std::move(query_ctx)) {}
 
-PipelineFragmentContext::~PipelineFragmentContext() {}
+PipelineFragmentContext::~PipelineFragmentContext() = default;
 
 void PipelineFragmentContext::cancel(const PPlanFragmentCancelReason& reason,
                                      const std::string& msg) {
@@ -62,8 +70,12 @@ void PipelineFragmentContext::cancel(const PPlanFragmentCancelReason& reason,
         if (_cancelled) {
             return;
         }
+        if (reason == PPlanFragmentCancelReason::LIMIT_REACH) {
+            // TODO pipeline report on cancel
+        } else {
+            _exec_status = Status::Cancelled(msg);
+        }
         _cancelled = true;
-        _runtime_state->set_is_cancelled(true);
         _cancel_reason = reason;
         _cancel_msg = msg;
         _runtime_state->set_is_cancelled(true);
@@ -71,9 +83,10 @@ void PipelineFragmentContext::cancel(const PPlanFragmentCancelReason& reason,
         _runtime_state->get_query_fragments_ctx()->set_ready_to_execute(true);
 
         // must close stream_mgr to avoid dead lock in Exchange Node
-        auto env = _runtime_state->exec_env();
-        auto id = _runtime_state->fragment_instance_id();
-        env->vstream_mgr()->cancel(id);
+        _exec_env->vstream_mgr()->cancel(_fragment_instance_id);
+        // Cancel the result queue manager used by spark doris connector
+        // TODO pipeline incomp
+        // _exec_env->result_queue_mgr()->update_queue_status(id, Status::Aborted(msg));
     }
 }
 
@@ -141,6 +154,7 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     if (request.query_options.__isset.is_report_success) {
         fragment_context->set_is_report_success(request.query_options.is_report_success);
     }
+    _runtime_profile.reset(new RuntimeProfile("PipelineContext"));
 
     RETURN_IF_ERROR(_runtime_state->create_block_mgr());
     auto* desc_tbl = _query_ctx->desc_tbl;
@@ -215,6 +229,13 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
         RETURN_IF_ERROR(_create_sink(request.fragment.output_sink));
     }
     RETURN_IF_ERROR(_build_pipeline_tasks(request));
+
+    for(auto& pipeline : _pipelines) {
+        _runtime_profile->add_child(pipeline->runtime_profile(), true, nullptr);
+    }
+    // TODO pipeline don't generate exec node's profiles
+    _runtime_state->runtime_profile()->clear_children();
+    _runtime_state->runtime_profile()->add_child(_runtime_profile.get(), true, nullptr);
     _prepared = true;
     return Status::OK();
 }
@@ -242,7 +263,7 @@ Status PipelineFragmentContext::_build_pipeline_tasks(
         Operators operators;
         RETURN_IF_ERROR(pipeline->build_operators(operators));
         auto task = std::make_unique<PipelineTask>(pipeline, 0, _runtime_state.get(), operators,
-                                                   sink, this);
+                                                   sink, this, pipeline->runtime_profile());
         sink->set_child(task->get_root());
         _tasks.emplace_back(std::move(task));
     }
@@ -269,14 +290,14 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
             return Status::InternalError("Just suppourt NewOlapScanNode in pipeline");
         }
         OperatorTemplatePtr operator_t = std::make_shared<OlapScanOperatorTemplate>(
-                fragment_context->next_operator_template_id(), "OlapScanOperatorTemplate",
+                fragment_context->next_operator_template_id(), "OlapScanOperator",
                 new_olap_scan_node);
         RETURN_IF_ERROR(cur_pipe->set_source(operator_t));
         break;
     }
     case TPlanNodeType::EXCHANGE_NODE: {
         OperatorTemplatePtr operator_t = std::make_shared<ExchangeSourceOperatorTemplate>(
-                next_operator_template_id(), "ExchangeOpertorT", node);
+                next_operator_template_id(), "ExchangeSourceOperator", node);
         RETURN_IF_ERROR(cur_pipe->set_source(operator_t));
         break;
     }
@@ -286,17 +307,17 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         auto new_pipe = add_pipeline();
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipe));
         OperatorTemplatePtr agg_sink = std::make_shared<AggSinkOperatorTemplate>(
-                next_operator_template_id(), "AggSinkOperatorTemplate", agg_node, agg_ctx);
+                next_operator_template_id(), "AggSinkOperator", agg_node, agg_ctx);
         RETURN_IF_ERROR(new_pipe->set_sink(agg_sink));
         if (agg_node->is_streaming_preagg()) {
             OperatorTemplatePtr agg_source = std::make_shared<PreAggSourceOperatorTemplate>(
-                    next_operator_template_id(), "PAggSourceOperatorTemplate", agg_node, agg_ctx);
+                    next_operator_template_id(), "PAggSourceOperator", agg_node, agg_ctx);
             RETURN_IF_ERROR(cur_pipe->set_source(agg_source));
         } else {
             // 如果这里去掉依赖，要修改agg sink的can_read方法
             cur_pipe->add_dependency(new_pipe);
             OperatorTemplatePtr agg_source = std::make_shared<FinalAggSourceOperatorTemplate>(
-                    next_operator_template_id(), "FinalAggSourceOperatorT", agg_node);
+                    next_operator_template_id(), "FinalAggSourceOperator", agg_node);
             RETURN_IF_ERROR(cur_pipe->set_source(agg_source));
         }
         break;
@@ -310,7 +331,7 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
 
 Status PipelineFragmentContext::submit() {
     if (_submitted) {
-        return Status::InternalError("submittd");
+        return Status::InternalError("submitted");
     }
 
     for (auto& task : _tasks) {
@@ -320,20 +341,19 @@ Status PipelineFragmentContext::submit() {
     return Status::OK();
 }
 
-// 构造sink operator
 Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
     OperatorTemplatePtr sink_;
     switch (thrift_sink.type) {
     case TDataSinkType::DATA_STREAM_SINK: {
         auto* exchange_sink = dynamic_cast<doris::vectorized::VDataStreamSender*>(_sink.get());
-        sink_ = std::make_shared<ExchangeSinkOperatorTemplate>(next_operator_template_id(), "",
-                                                               nullptr, exchange_sink);
+        sink_ = std::make_shared<ExchangeSinkOperatorTemplate>(
+                next_operator_template_id(), "ExchangeSinkOperator", nullptr, exchange_sink);
         break;
     }
     case TDataSinkType::RESULT_SINK: {
         auto* result_sink = dynamic_cast<doris::vectorized::VResultSink*>(_sink.get());
-        sink_ = std::make_shared<ResultSinkOperatorTemplate>(next_operator_template_id(), "",
-                                                             nullptr, result_sink);
+        sink_ = std::make_shared<ResultSinkOperatorTemplate>(
+                next_operator_template_id(), "ResultSinkOperator", nullptr, result_sink);
         break;
     }
     default:
@@ -345,7 +365,166 @@ Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
 void PipelineFragmentContext::close_a_pipeline() {
     ++_closed_pipeline_cnt;
     if (_closed_pipeline_cnt == _pipelines.size()) {
+        send_report(true);
         _exec_env->fragment_mgr()->remove_pipeline_context(shared_from_this());
     }
 }
+
+// TODO pipeline dump copy from FragmentExecState::to_http_path
+std::string PipelineFragmentContext::to_http_path(const std::string& file_name) {
+    std::stringstream url;
+    url << "http://" << BackendOptions::get_localhost() << ":" << config::webserver_port
+        << "/api/_download_load?"
+        << "token=" << _exec_env->token() << "&file=" << file_name;
+    return url.str();
+}
+
+// TODO pipeline dump copy from FragmentExecState::coordinator_callback
+// TODO pipeline this callback should be placed in a thread pool
+void PipelineFragmentContext::send_report(bool done) {
+    DCHECK(_closed_pipeline_cnt == _pipelines.size());
+    if (!_is_report_success) {
+        return;
+    }
+
+    Status exec_status = Status::OK();
+    {
+        std::lock_guard<std::mutex> l(_status_lock);
+        if (!_exec_status.ok()) {
+            exec_status = _exec_status;
+        }
+    }
+
+    Status coord_status;
+    auto coord_addr = _query_ctx->coord_addr;
+    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), coord_addr, &coord_status);
+    if (!coord_status.ok()) {
+        std::stringstream ss;
+        ss << "couldn't get a client for " << coord_addr << ", reason: " << coord_status;
+        LOG(WARNING) << "query_id: " << print_id(_query_id) << ", " << ss.str();
+        {
+            std::lock_guard<std::mutex> l(_status_lock);
+            if (_exec_status.ok()) {
+                _exec_status = Status::InternalError(ss.str());
+            }
+        }
+        return;
+    }
+    auto* profile = _runtime_state->runtime_profile();
+
+    TReportExecStatusParams params;
+    params.protocol_version = FrontendServiceVersion::V1;
+    params.__set_query_id(_query_id);
+    params.__set_backend_num(_backend_num);
+    params.__set_fragment_instance_id(_fragment_instance_id);
+    exec_status.set_t_status(&params);
+    params.__set_done(true);
+
+    auto* runtime_state = _runtime_state.get();
+    DCHECK(runtime_state != nullptr);
+    if (runtime_state->query_type() == TQueryType::LOAD && !done && exec_status.ok()) {
+        // this is a load plan, and load is not finished, just make a brief report
+        params.__set_loaded_rows(runtime_state->num_rows_load_total());
+        params.__set_loaded_bytes(runtime_state->num_bytes_load_total());
+    } else {
+        if (runtime_state->query_type() == TQueryType::LOAD) {
+            params.__set_loaded_rows(runtime_state->num_rows_load_total());
+            params.__set_loaded_bytes(runtime_state->num_bytes_load_total());
+        }
+        if (profile == nullptr) {
+            params.__isset.profile = false;
+        } else {
+            profile->to_thrift(&params.profile);
+            params.__isset.profile = true;
+        }
+
+        if (!runtime_state->output_files().empty()) {
+            params.__isset.delta_urls = true;
+            for (auto& it : runtime_state->output_files()) {
+                params.delta_urls.push_back(to_http_path(it));
+            }
+        }
+        if (runtime_state->num_rows_load_total() > 0 ||
+            runtime_state->num_rows_load_filtered() > 0) {
+            params.__isset.load_counters = true;
+
+            static std::string s_dpp_normal_all = "dpp.norm.ALL";
+            static std::string s_dpp_abnormal_all = "dpp.abnorm.ALL";
+            static std::string s_unselected_rows = "unselected.rows";
+
+            params.load_counters.emplace(s_dpp_normal_all,
+                                         std::to_string(runtime_state->num_rows_load_success()));
+            params.load_counters.emplace(s_dpp_abnormal_all,
+                                         std::to_string(runtime_state->num_rows_load_filtered()));
+            params.load_counters.emplace(s_unselected_rows,
+                                         std::to_string(runtime_state->num_rows_load_unselected()));
+        }
+        if (!runtime_state->get_error_log_file_path().empty()) {
+            params.__set_tracking_url(
+                    to_load_error_http_path(runtime_state->get_error_log_file_path()));
+        }
+        if (!runtime_state->export_output_files().empty()) {
+            params.__isset.export_files = true;
+            params.export_files = runtime_state->export_output_files();
+        }
+        if (!runtime_state->tablet_commit_infos().empty()) {
+            params.__isset.commitInfos = true;
+            params.commitInfos.reserve(runtime_state->tablet_commit_infos().size());
+            for (auto& info : runtime_state->tablet_commit_infos()) {
+                params.commitInfos.push_back(info);
+            }
+        }
+        if (!runtime_state->error_tablet_infos().empty()) {
+            params.__isset.errorTabletInfos = true;
+            params.errorTabletInfos.reserve(runtime_state->error_tablet_infos().size());
+            for (auto& info : runtime_state->error_tablet_infos()) {
+                params.errorTabletInfos.push_back(info);
+            }
+        }
+
+        // Send new errors to coordinator
+        runtime_state->get_unreported_errors(&(params.error_log));
+        params.__isset.error_log = (params.error_log.size() > 0);
+    }
+
+    if (_exec_env->master_info()->__isset.backend_id) {
+        params.__set_backend_id(_exec_env->master_info()->backend_id);
+    }
+
+    TReportExecStatusResult res;
+    Status rpc_status;
+
+    VLOG_DEBUG << "reportExecStatus params is "
+               << apache::thrift::ThriftDebugString(params).c_str();
+    try {
+        try {
+            coord->reportExecStatus(res, params);
+        } catch (TTransportException& e) {
+            LOG(WARNING) << "Retrying ReportExecStatus. query id: " << print_id(_query_id)
+                         << ", instance id: " << print_id(_fragment_instance_id) << " to "
+                         << coord_addr << ", err: " << e.what();
+            rpc_status = coord.reopen();
+
+            if (!rpc_status.ok()) {
+                // we need to cancel the execution of this fragment
+                cancel(PPlanFragmentCancelReason::INTERNAL_ERROR, "rpc fail");
+                return;
+            }
+            coord->reportExecStatus(res, params);
+        }
+
+        rpc_status = Status(res.status);
+    } catch (TException& e) {
+        std::stringstream msg;
+        msg << "ReportExecStatus() to " << coord_addr << " failed:\n" << e.what();
+        LOG(WARNING) << msg.str();
+        rpc_status = Status::InternalError(msg.str());
+    }
+
+    if (!rpc_status.ok()) {
+        // we need to cancel the execution of this fragment
+        cancel(PPlanFragmentCancelReason::INTERNAL_ERROR, "rpc fail 2");
+    }
+}
+
 } // namespace doris::pipeline

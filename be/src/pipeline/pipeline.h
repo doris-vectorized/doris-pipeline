@@ -73,6 +73,8 @@ public:
 
     Status build_operators(Operators&);
 
+    RuntimeProfile* runtime_profile() { return _pipeline_profile.get(); }
+
 private:
     std::atomic<uint32_t> _complete_dependency;
 
@@ -85,6 +87,8 @@ private:
 
     PipelineId _pipeline_id;
     std::shared_ptr<PipelineFragmentContext> _context;
+
+    std::unique_ptr<RuntimeProfile> _pipeline_profile;
 };
 
 } // namespace doris::pipeline

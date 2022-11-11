@@ -59,7 +59,6 @@ private:
     std::vector<vectorized::VPartitionInfo*> _partition_infos;
     std::unique_ptr<SinkBuffer> _sink_buffer;
     vectorized::VDataStreamSender* _sink;
-    RuntimeProfile* _profile = nullptr; // Allocated from _pool
     RuntimeState* _state = nullptr;
 
     std::vector<Channel*> _channels;

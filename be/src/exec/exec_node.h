@@ -213,9 +213,6 @@ public:
 
     virtual std::string get_name();
 
-    // Extract node id from p->name().
-    static int get_node_id_from_profile(RuntimeProfile* p);
-
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
 

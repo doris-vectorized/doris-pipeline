@@ -31,7 +31,8 @@ class PipelineTask;
 class PipelineFragmentContext : public std::enable_shared_from_this<PipelineFragmentContext> {
 public:
     PipelineFragmentContext(const TUniqueId& query_id, const TUniqueId& instance_id,
-                            std::shared_ptr<QueryFragmentsCtx> query_ctx, ExecEnv* exec_env);
+                            int backend_num, std::shared_ptr<QueryFragmentsCtx> query_ctx,
+                            ExecEnv* exec_env);
 
     virtual ~PipelineFragmentContext();
 
@@ -41,7 +42,8 @@ public:
 
     RuntimeState* get_runtime_state() { return _runtime_state.get(); }
 
-    bool is_canceled() { return _runtime_state->is_cancelled(); }
+    // should be protected by lock?
+    bool is_canceled() const { return _cancelled; }
 
     int32_t next_operator_template_id() { return _next_operator_template_id++; }
 
@@ -55,7 +57,8 @@ public:
 
     void set_need_wait_execution_trigger() { _need_wait_execution_trigger = true; }
 
-    void cancel(const PPlanFragmentCancelReason& reason, const std::string& msg = "");
+    void cancel(const PPlanFragmentCancelReason& reason = PPlanFragmentCancelReason::INTERNAL_ERROR,
+                const std::string& msg = "");
 
     // TODO pipeline runtime filter
     //    void set_merge_controller_handler(
@@ -69,11 +72,18 @@ public:
 
     void close_a_pipeline();
 
+    std::string to_http_path(const std::string& file_name);
+
+    void send_report(bool);
+
 private:
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
     TUniqueId _fragment_instance_id;
+
+    int _backend_num;
+
     ExecEnv* _exec_env;
     TUniqueId _fragment_id;
 
@@ -96,7 +106,7 @@ private:
 
     PipelinePtr _root_pipeline;
 
-    // TODO pipeline profile
+    std::unique_ptr<RuntimeProfile> _runtime_profile;
     bool _is_report_success = false;
 
     std::unique_ptr<RuntimeState> _runtime_state;
@@ -110,6 +120,7 @@ private:
     // If set the true, this plan fragment will be executed only after FE send execution start rpc.
     bool _need_wait_execution_trigger = false;
 
+private:
     Status _create_sink(const TDataSink& t_data_sink);
     Status _build_pipelines(ExecNode*, PipelinePtr);
     Status _build_pipeline_tasks(const doris::TExecPlanFragmentParams& request);

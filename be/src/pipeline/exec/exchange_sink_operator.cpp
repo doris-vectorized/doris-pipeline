@@ -105,14 +105,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     for (const auto& channel : _sink->_channels) {
         instances.emplace_back(channel->get_fragment_instance_id_str());
     }
-    //    std::string title = fmt::format("ExchangeSinkOperator (dst_id={}, dst_fragments=[{}])",
-    //                                    _sink->_dest_node_id, instances);
-    std::string title = "ExchangeSinkOperator dst_id, dst_fragments TODO";
-    // sink的pool用的是context的
-    _profile = _pool->add(new RuntimeProfile(title));
-    SCOPED_TIMER(_profile->total_time_counter());
     _mem_tracker = std::make_unique<MemTracker>(
-            "ExchangeSinkOperator:" + print_id(state->fragment_instance_id()), _profile);
+            "ExchangeSinkOperator:" + print_id(state->fragment_instance_id()),
+            _runtime_profile.get());
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
     if (_part_type == TPartitionType::UNPARTITIONED || _part_type == TPartitionType::RANDOM) {
@@ -174,7 +169,7 @@ Status ExchangeSinkOperator::finalize(RuntimeState* state) {
 }
 
 Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block, bool eos) {
-    SCOPED_TIMER(_profile->total_time_counter());
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     if (_part_type == TPartitionType::UNPARTITIONED || _channels.size() == 1) {
         // 1. serialize depends on it is not local exchange
@@ -269,6 +264,10 @@ Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
         // Range partition
         // 1. calculate range
         // 2. dispatch rows to channel
+    }
+    if(block) {
+        _num_rows_returned += block->rows();
+        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
     return Status::OK();
 }

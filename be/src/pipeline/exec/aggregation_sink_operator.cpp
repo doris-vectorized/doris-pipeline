@@ -65,11 +65,14 @@ bool AggSinkOperator::can_write() {
 }
 
 Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, bool eos) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     if ((!in_block || in_block->rows() == 0) && !eos) {
         return Status::OK();
     }
     if (!_agg_node->is_streaming_preagg()) {
         RETURN_IF_ERROR(_agg_node->_executor.execute(in_block));
+        _num_rows_returned += in_block->rows();
+        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     } else {
         // TODO pipeline 不能这里是返回block
 
@@ -89,6 +92,7 @@ Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, b
                 _agg_node->_make_nullable_output_key(bock_from_ctx);
                 _agg_context->push_block(bock_from_ctx);
                 COUNTER_SET(_agg_node->_rows_returned_counter, _num_rows_returned);
+                COUNTER_SET(_rows_returned_counter, _num_rows_returned);
             }
         }
 
@@ -109,6 +113,7 @@ Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, b
                     _agg_node->_make_nullable_output_key(bock_from_ctx);
                     _agg_context->push_block(bock_from_ctx);
                     COUNTER_SET(_agg_node->_rows_returned_counter, _num_rows_returned);
+                    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
                 }
             }
             // 尽快出发下游结束，这里不在finalize中做。
