@@ -294,7 +294,7 @@ void TaskScheduler::_do_work(size_t index) {
     LOG(INFO) << "Stop TaskScheduler worker " << index;
 }
 
-void TaskScheduler::_try_close_task(PipelineTask* task, PipelineTaskState state) {
+Status TaskScheduler::_try_close_task(PipelineTask* task, PipelineTaskState state) {
     LOG(INFO) << "llj log _try_close_task " << task;
     // state 只能是CANCELED或FINISHED两种
     if (task->is_pending_finish()) {
@@ -302,17 +302,15 @@ void TaskScheduler::_try_close_task(PipelineTask* task, PipelineTaskState state)
         //            task->set_previous_core_id(-1);
         task->set_state(PENDING_FINISH);
         _blocked_task_scheduler->add_blocked_task(task);
+        return Status::OK();
     } else {
         LOG(INFO) << "llj log is_pending_finish else " << task;
-        auto status = task->close();
-        if (!status.ok()) {
-            // LOG warning
-        }
+        RETURN_IF_ERROR(task->close());
         task->set_state(state);
         if (state == CANCELED) {
             task->finish_p_dependency();
         }
-        task->fragment_context()->close_a_pipeline();
+        RETURN_IF_ERROR(task->fragment_context()->close_a_pipeline());
     }
 }
 

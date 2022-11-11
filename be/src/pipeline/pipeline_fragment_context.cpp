@@ -17,6 +17,7 @@
 
 #include "pipeline_fragment_context.h"
 
+#include "common/status.h"
 #include "exec/agg_context.h"
 #include "exec/aggregation_sink_operator.h"
 #include "exec/data_sink.h"
@@ -105,12 +106,6 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
             .tag("backend_num", request.backend_num)
             .tag("pthread_id", (uintptr_t)pthread_self());
 
-    // 基于量量化的算子做POC
-    if (!request.query_options.__isset.enable_vectorized_engine ||
-        !request.query_options.enable_vectorized_engine) {
-        return Status::InternalError("should set enable_vectorized_engine to true");
-    }
-
     // 1. 创建初始化RuntimeState
     _runtime_state = std::make_unique<RuntimeState>(params, request.query_options,
                                                     _query_ctx->query_globals, _exec_env);
@@ -161,8 +156,9 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
         DCHECK_GT(num_senders, 0);
         static_cast<vectorized::VExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
-    // 这里不对plan进行prepare
-    // RETURN_IF_ERROR(_plan->prepare(_runtime_state.get()));
+
+    RETURN_IF_ERROR(_root_plan->prepare(_runtime_state.get()));
+    RETURN_IF_ERROR(_root_plan->open(_runtime_state.get()));
 
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
@@ -342,10 +338,12 @@ Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
     return _root_pipeline->set_sink(sink_);
 }
 
-void PipelineFragmentContext::close_a_pipeline() {
+Status PipelineFragmentContext::close_a_pipeline() {
     ++_closed_pipeline_cnt;
     if (_closed_pipeline_cnt == _pipelines.size()) {
         _exec_env->fragment_mgr()->remove_pipeline_context(shared_from_this());
+        RETURN_IF_ERROR(_root_plan->close(_runtime_state.get()));
     }
+    return Status::OK();
 }
 } // namespace doris::pipeline

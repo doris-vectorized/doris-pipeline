@@ -265,6 +265,6 @@ private:
 
 private:
     void _do_work(size_t index);
-    void _try_close_task(PipelineTask* task, PipelineTaskState state);
+    Status _try_close_task(PipelineTask* task, PipelineTaskState state);
 };
 } // namespace doris::pipeline

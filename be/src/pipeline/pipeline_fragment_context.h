@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "common/status.h"
 #include "pipeline.h"
 #include "runtime/runtime_state.h"
 
@@ -67,7 +68,7 @@ public:
 
     TUniqueId get_query_id() const { return _query_id; }
 
-    void close_a_pipeline();
+    Status close_a_pipeline();
 
 private:
     // Id of this query
