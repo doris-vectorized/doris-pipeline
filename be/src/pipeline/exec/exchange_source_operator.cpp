@@ -45,12 +45,9 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
 
     // TODO pipeline 支持merge读
     if (_exchange_node->_is_merging) {
-        return Status::NotSupported("Now pipeline shuffle not support merging.");
-    }
-    if (_exchange_node->_is_merging) {
         return Status::NotSupported("Not Implemented merging exchange source operator");
     }
-    return Status::OK();
+    return Operator::prepare(state);
 }
 
 Status ExchangeSourceOperator::open(RuntimeState* state) {

@@ -66,18 +66,15 @@ bool AggSinkOperator::can_write() {
 
 Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, bool eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    if ((!in_block || in_block->rows() == 0) && !eos) {
-        return Status::OK();
-    }
     if (!_agg_node->is_streaming_preagg()) {
+        if (!in_block || in_block->rows() == 0) {
+            return Status::OK();
+        }
         RETURN_IF_ERROR(_agg_node->_executor.execute(in_block));
         _num_rows_returned += in_block->rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     } else {
-        // TODO pipeline 不能这里是返回block
-
         Status ret = Status::OK();
-
         if (in_block && in_block->rows() > 0) {
             auto* bock_from_ctx = _agg_context->get_free_block();
             ret = _agg_node->_executor.pre_agg(in_block, bock_from_ctx);
