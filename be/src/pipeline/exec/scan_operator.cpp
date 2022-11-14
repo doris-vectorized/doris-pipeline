@@ -80,6 +80,7 @@ bool ScanOperator::can_read() {
 }
 
 Status ScanOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     // 参考vscan node
     if (state->is_cancelled()) {
         _scanner_ctx->set_status_on_error(Status::Cancelled("query cancelled"));

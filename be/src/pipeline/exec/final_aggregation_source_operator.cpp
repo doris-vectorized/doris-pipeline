@@ -50,6 +50,7 @@ bool FinalAggSourceOperator::can_read() {
 }
 
 Status FinalAggSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(_agg_node->_executor.get_result(state, block, eos));
     _agg_node->_make_nullable_output_key(block);
     // dispose the having clause, should not be execute in prestreaming agg

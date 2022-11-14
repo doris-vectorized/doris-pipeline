@@ -22,6 +22,9 @@
 namespace doris::pipeline {
 
 Status Pipeline::prepare(RuntimeState* state) {
+    std::stringstream ss;
+    ss << "Pipeline" << " (pipeline id=" << _pipeline_id << ")";
+    _pipeline_profile.reset(new RuntimeProfile(ss.str()));
     for (auto& op : _operators) {
         RETURN_IF_ERROR(op->prepare(state));
     }

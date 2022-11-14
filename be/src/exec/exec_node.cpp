@@ -88,10 +88,6 @@ namespace doris {
 
 const std::string ExecNode::ROW_THROUGHPUT_COUNTER = "RowsReturnedRate";
 
-int ExecNode::get_node_id_from_profile(RuntimeProfile* p) {
-    return p->metadata();
-}
-
 ExecNode::RowBatchQueue::RowBatchQueue(int max_batches) : BlockingQueue<RowBatch*>(max_batches) {}
 
 ExecNode::RowBatchQueue::~RowBatchQueue() {

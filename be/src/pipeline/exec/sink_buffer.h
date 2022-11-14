@@ -49,6 +49,7 @@ struct ClosureContext {
 };
 
 // 一个ExchangeSinkOperator对应一个SinkBuffer
+// TODO pipeline sr
 class SinkBuffer {
 public:
     SinkBuffer(PUniqueId, int, PlanNodeId, RuntimeState*);

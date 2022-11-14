@@ -41,17 +41,13 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
             _exchange_node->_id, _exchange_node->_num_senders, config::exchg_node_buffer_size_bytes,
             _exchange_node->_runtime_profile.get(), _exchange_node->_is_merging,
             _exchange_node->_sub_plan_query_statistics_recvr);
-    _exchange_node->_rows_returned_counter =
-            ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
+    _exchange_node->_rows_returned_counter = _rows_returned_counter;
 
     // TODO pipeline 支持merge读
     if (_exchange_node->_is_merging) {
-        return Status::NotSupported("Now pipeline shuffle not support merging.");
-    }
-    if (_exchange_node->_is_merging) {
         return Status::NotSupported("Not Implemented merging exchange source operator");
     }
-    return Status::OK();
+    return Operator::prepare(state);
 }
 
 Status ExchangeSourceOperator::open(RuntimeState* state) {
@@ -72,7 +68,12 @@ bool ExchangeSourceOperator::can_read() {
 }
 
 Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
-    return _exchange_node->get_next(state, block, eos);
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+    auto st = _exchange_node->get_next(state, block, eos);
+    if (block) {
+        _num_rows_returned += block->rows();
+    }
+    return st;
     // TODO pipeline 支持merge读
     // VDataStreamRecvr::get_next
     //   VSortedRunMerger::get_next

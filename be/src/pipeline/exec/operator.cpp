@@ -20,7 +20,10 @@
 namespace doris::pipeline {
 
 Operator::Operator(OperatorTemplate* operator_template)
-        : _operator_template(operator_template), _limit(-1), _is_closed(false) {}
+        : _operator_template(operator_template),
+          _num_rows_returned(0),
+          _limit(-1),
+          _is_closed(false) {}
 
 bool Operator::is_sink() const {
     return _operator_template->is_sink();
@@ -31,11 +34,27 @@ bool Operator::is_source() const {
 }
 
 Status Operator::init(const ExecNode* exec_node, RuntimeState* state) {
-    _runtime_profile.reset(new RuntimeProfile("Operator"));
-    _runtime_profile->set_metadata(_operator_template->id());
+    _runtime_profile.reset(new RuntimeProfile(_operator_template->get_name()));
+    _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
+    _rows_returned_rate = runtime_profile()->add_derived_counter(
+            ExecNode::ROW_THROUGHPUT_COUNTER, TUnit::UNIT_PER_SECOND,
+            std::bind<int64_t>(&RuntimeProfile::units_per_second, _rows_returned_counter,
+                               runtime_profile()->total_time_counter()),
+            "");
     if (exec_node && exec_node->limit() >= 0) {
         _limit = exec_node->limit();
     }
+    return Status::OK();
+}
+
+Status Operator::link_profile(RuntimeProfile* parent) {
+    if (!_runtime_profile) {
+        return Status::InternalError("link profile error");
+    }
+    if (_child) {
+        RETURN_IF_ERROR(_child->link_profile(_runtime_profile.get()));
+    }
+    parent->add_child(_runtime_profile.get(), true, nullptr);
     return Status::OK();
 }
 
@@ -65,6 +84,9 @@ Status Operator::close(RuntimeState* state) {
     _is_closed = true;
     if (_operator_template->exec_node()) {
         _operator_template->exec_node()->close_self(state);
+    }
+    if (_rows_returned_counter != nullptr) {
+        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
     return Status::OK();
 }

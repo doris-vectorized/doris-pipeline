@@ -388,6 +388,8 @@ public:
     // This function updates _local_time_percent for each profile.
     void compute_time_in_profile();
 
+    void clear_children();
+
 private:
     // Pool for allocated counters. Usually owned by the creator of this
     // object, but occasionally allocated in the constructor.

@@ -679,7 +679,8 @@ Status FragmentMgr::exec_pipeline(const TExecPlanFragmentParams& params) {
 
     std::shared_ptr<pipeline::PipelineFragmentContext> context =
             std::make_shared<pipeline::PipelineFragmentContext>(
-                    fragments_ctx->query_id, fragment_instance_id, fragments_ctx, _exec_env);
+                    fragments_ctx->query_id, fragment_instance_id, params.backend_num,
+                    fragments_ctx, _exec_env);
     RETURN_IF_ERROR(context->prepare(params));
     {
         std::lock_guard<std::mutex> lock(_lock);
