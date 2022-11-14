@@ -19,6 +19,7 @@
 
 #include "common/config.h"
 #include "exec/sort_exec_exprs.h"
+#include "pipeline/pipeline.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/debug_util.h"
@@ -66,8 +67,12 @@ Status VSortNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 Status VSortNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    _runtime_profile->add_info_string("TOP-N", _limit == -1 ? "false" : "true");
     RETURN_IF_ERROR(ExecNode::prepare(state));
+    return prepare_self(state);
+}
+
+Status VSortNode::prepare_self(RuntimeState* state) {
+    _runtime_profile->add_info_string("TOP-N", _limit == -1 ? "false" : "true");
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     RETURN_IF_ERROR(_vsort_exec_exprs.prepare(state, child(0)->row_desc(), _row_descriptor));
     return Status::OK();
@@ -118,6 +123,10 @@ Status VSortNode::get_next(RuntimeState* state, Block* block, bool* eos) {
     RETURN_IF_ERROR(_sorter->get_next(state, block, eos));
     reached_limit(block, eos);
     return Status::OK();
+}
+
+Sorter* VSortNode::get_sorter() {
+    return _sorter.get();
 }
 
 Status VSortNode::reset(RuntimeState* state) {

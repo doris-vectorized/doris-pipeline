@@ -27,6 +27,8 @@
 #include "exec/pre_aggregation_source_operator.h"
 #include "exec/result_sink_operator.h"
 #include "exec/scan_node.h"
+#include "exec/sort_sink_operator.h"
+#include "exec/sort_source_operator.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "pipeline_task.h"
@@ -40,6 +42,7 @@
 #include "vec/exec/scan/vscan_node.h"
 #include "vec/exec/vaggregation_node.h"
 #include "vec/exec/vexchange_node.h"
+#include "vec/exec/vsort_node.h"
 #include "vec/runtime/vdata_stream_mgr.h"
 #include "vec/sink/vdata_stream_sender.h"
 #include "vec/sink/vresult_sink.h"
@@ -300,6 +303,21 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
                     next_operator_template_id(), "FinalAggSourceOperator", agg_node);
             RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         }
+        break;
+    }
+    case TPlanNodeType::SORT_NODE: {
+        auto* sort_node = assert_cast<vectorized::VSortNode*>(node);
+        auto new_pipeline = add_pipeline();
+        RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipeline));
+
+        auto sort_context = std::make_shared<SortContext>(sort_node->get_sorter());
+        OperatorTemplatePtr sort_sink = std::make_shared<SortSinkOperatorTemplate>(
+                next_operator_template_id(), "SortSinkOperatorTemplate", sort_node, sort_context);
+        RETURN_IF_ERROR(new_pipeline->set_sink(sort_sink));
+        cur_pipe->add_dependency(new_pipeline);
+        OperatorTemplatePtr sort_source = std::make_shared<SortSourceOperatorTemplate>(
+                next_operator_template_id(), "SortSourceOperatorTemplate", sort_node, sort_context);
+        RETURN_IF_ERROR(cur_pipe->add_operator(sort_source));
         break;
     }
     default:

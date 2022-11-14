@@ -26,7 +26,6 @@ set(PIPELINE_FILES
         pipeline_fragment_context.cpp
         pipeline_task.cpp
         task_scheduler.cpp
-
         exec/operator.cpp
         exec/scan_operator.cpp
         exec/olap_scan_operator.cpp
@@ -37,7 +36,9 @@ set(PIPELINE_FILES
         exec/aggregation_sink_operator.cpp
         exec/final_aggregation_source_operator.cpp
         exec/pre_aggregation_source_operator.cpp
-        exec/agg_context.cpp)
+        exec/agg_context.cpp
+        exec/sort_source_operator.cpp
+        exec/sort_sink_operator.cpp)
 
 add_library(Pipeline STATIC
         ${PIPELINE_FILES}
