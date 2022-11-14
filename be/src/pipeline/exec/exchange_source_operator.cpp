@@ -43,7 +43,7 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
             _exchange_node->_sub_plan_query_statistics_recvr);
     _exchange_node->_rows_returned_counter = _rows_returned_counter;
 
-    // TODO pipeline 支持merge读
+    // TODO: Support merge exchange
     if (_exchange_node->_is_merging) {
         return Status::NotSupported("Not Implemented merging exchange source operator");
     }
@@ -51,18 +51,11 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
 }
 
 Status ExchangeSourceOperator::open(RuntimeState* state) {
-    // TODO pipeline 1
-    // 如果是_is_merging的情况
-    // VDataStreamRecvr::create_merger
-    //   VSortedRunMerger::prepare
-    //     ReceiveQueueSortCursorImpl::ReceiveQueueSortCursorImpl
-    //       ReceiveQueueSortCursorImpl::has_next_block
-    //         VDataStreamRecvr::SenderQueue::get_batch 阻塞（eof、出错、下一个block到来）
     return Operator::open(state);
 }
 
 bool ExchangeSourceOperator::can_read() {
-    // VDataStreamRecvr中所有SenderQueue都可读
+    // All sender queue of VDataStreamRecvr can read
     // TODO pipeline 1
     return _exchange_node->_stream_recvr->has_data(0);
 }
@@ -74,11 +67,6 @@ Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block*
         _num_rows_returned += block->rows();
     }
     return st;
-    // TODO pipeline 支持merge读
-    // VDataStreamRecvr::get_next
-    //   VSortedRunMerger::get_next
-    //     ReceiveQueueSortCursorImpl::has_next_block
-    //       VDataStreamRecvr::SenderQueue::get_batch阻塞
 }
 
 Status ExchangeSourceOperator::close(RuntimeState* state) {

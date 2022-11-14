@@ -54,7 +54,7 @@ private:
     bool _is_finished = false;
     bool _is_canceled = false;
     int64_t _cur_bytes_in_queue = 0;
-    int64_t _max_bytes_in_queue = 1024 * 1024 * 1024 / 10; // TODO pipeline
+    static constexpr int64_t MAX_BYTE_OF_QUEUE = 1024l * 1024 * 1024 / 10;
 };
 
 } // namespace pipeline

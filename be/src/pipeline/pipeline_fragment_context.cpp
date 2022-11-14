@@ -27,8 +27,8 @@
 #include "exec/pre_aggregation_source_operator.h"
 #include "exec/result_sink_operator.h"
 #include "exec/scan_node.h"
-#include "gen_cpp/HeartbeatService_types.h"
 #include "gen_cpp/FrontendService.h"
+#include "gen_cpp/HeartbeatService_types.h"
 #include "pipeline_task.h"
 #include "runtime/client_cache.h"
 #include "runtime/fragment_mgr.h"
@@ -78,7 +78,6 @@ void PipelineFragmentContext::cancel(const PPlanFragmentCancelReason& reason,
         _cancelled = true;
         _cancel_reason = reason;
         _cancel_msg = msg;
-        _runtime_state->set_is_cancelled(true);
         // To notify wait_for_start()
         _runtime_state->get_query_fragments_ctx()->set_ready_to_execute(true);
 
@@ -91,7 +90,7 @@ void PipelineFragmentContext::cancel(const PPlanFragmentCancelReason& reason,
 }
 
 PipelinePtr PipelineFragmentContext::add_pipeline() {
-    // _prepared、_submitted或_canceled都不能再添加pipeline
+    // _prepared、_submitted, _canceled should do not add pipeline
     PipelineId id = _next_pipeline_id++;
     auto pipeline = std::make_shared<Pipeline>(id, shared_from_this());
     _pipelines.emplace_back(pipeline);
@@ -118,19 +117,19 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
             .tag("backend_num", request.backend_num)
             .tag("pthread_id", (uintptr_t)pthread_self());
 
-    // 基于量量化的算子做POC
+    // Must be vec exec engine
     if (!request.query_options.__isset.enable_vectorized_engine ||
         !request.query_options.enable_vectorized_engine) {
         return Status::InternalError("should set enable_vectorized_engine to true");
     }
 
-    // 1. 创建初始化RuntimeState
+    // 1. init _runtime_state
     _runtime_state = std::make_unique<RuntimeState>(params, request.query_options,
                                                     _query_ctx->query_globals, _exec_env);
     _runtime_state->set_query_fragments_ctx(_query_ctx.get());
     _runtime_state->set_tracer(std::move(tracer));
 
-    // TODO 可以和plan_fragment_executor中的prepare部分合并
+    // TODO should be combine with plan_fragment_executor.prepare funciton
     RETURN_IF_ERROR(_runtime_state->init_mem_trackers(request.params.query_id));
     RETURN_IF_ERROR(_runtime_state->runtime_filter_mgr()->init());
     _runtime_state->set_be_number(request.backend_num);
@@ -160,8 +159,7 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     auto* desc_tbl = _query_ctx->desc_tbl;
     _runtime_state->set_desc_tbl(desc_tbl);
 
-    // 组建pipeline
-    // 2. 创建ExecNode，并创建pipeline，放入PipelineFragmentContext
+    // 2. Create ExecNode to build pipeline with PipelineFragmentContext
     RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state.get(), _runtime_state->obj_pool(),
                                           request.fragment.plan, *desc_tbl, &_root_plan));
     _runtime_state->set_fragment_root_id(_root_plan->id());
@@ -175,8 +173,6 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
         DCHECK_GT(num_senders, 0);
         static_cast<vectorized::VExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
-    // 这里不对plan进行prepare
-    // RETURN_IF_ERROR(_plan->prepare(_runtime_state.get()));
 
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
@@ -185,9 +181,8 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     VLOG_CRITICAL << "scan_nodes.size()=" << scan_nodes.size();
     VLOG_CRITICAL << "params.per_node_scan_ranges.size()=" << params.per_node_scan_ranges.size();
 
-    // 先执行，在Operator内部也许用得到
     _root_plan->try_do_aggregate_serde_improve();
-    // 暂时将scan range放在ScanNode上
+    // set scan range in ScanNode
     for (int i = 0; i < scan_nodes.size(); ++i) {
         // TODO(cmy): this "if...else" should be removed once all ScanNode are derived from VScanNode.
         ExecNode* node = scan_nodes[i];
@@ -212,7 +207,6 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
         }
     }
 
-    // sr range转换成morsel queue,最简单的，一个morsel就是一个scan range，每个scan node对应一个mosel queue
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
 
@@ -230,7 +224,7 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     }
     RETURN_IF_ERROR(_build_pipeline_tasks(request));
 
-    for(auto& pipeline : _pipelines) {
+    for (auto& pipeline : _pipelines) {
         _runtime_profile->add_child(pipeline->runtime_profile(), true, nullptr);
     }
     // TODO pipeline don't generate exec node's profiles
@@ -250,15 +244,8 @@ Status PipelineFragmentContext::_build_pipeline_tasks(
         // if sink
         auto sink = pipeline->sink()->build_operator();
         RETURN_IF_ERROR(sink->init(pipeline->sink()->exec_node(), _runtime_state.get()));
-        // TODO pipeline 1 这个设计要重新考虑，把Operator和exec_node解绑，或者增加新的接口
-        auto& sink_ = *(sink);
-        if (typeid(sink_) == typeid(ExchangeSinkOperator)) {
-            auto* exchange_sink = dynamic_cast<ExchangeSinkOperator*>(sink.get());
-            RETURN_IF_ERROR(exchange_sink->init(request.fragment.output_sink));
-        } else if (typeid(sink_) == typeid(ResultSinkOperator)) {
-            auto* result_sink = dynamic_cast<ResultSinkOperator*>(sink.get());
-            RETURN_IF_ERROR(result_sink->init(request.fragment.output_sink));
-        }
+        // TODO pipeline 1 need to add new interface for exec node and operator
+        sink->init(request.fragment.output_sink);
 
         Operators operators;
         RETURN_IF_ERROR(pipeline->build_operators(operators));
@@ -274,35 +261,28 @@ Status PipelineFragmentContext::_build_pipeline_tasks(
     return Status::OK();
 }
 
+// TODO: use virtual function to do abstruct
 Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur_pipe) {
     auto* fragment_context = this;
     auto node_type = node->type();
     switch (node_type) {
     // for source
     case TPlanNodeType::OLAP_SCAN_NODE: {
-        // Starrocks中加了一个OlapScanPrepareOperatorFactory和NoopSinkOperatorFactory的pipeline
-        // OlapScanPrepareOperatorFactory和OlapScanOperatorFactory之间靠OlapScanContextFactoryPtr联系在一起
-        // OlapScanPrepareOperator和OlapScanOperator共享OlapScanContex只是为了使用OlapScanContex的标注依赖和管理声明周期的作用
-        // OlapScanPrepareOperator主要用来做open tablet
-        // 但中间还有一个NoopSinkOperatorFactory算子，可能是为了适配pipeline的调度而生成的
-        auto* new_olap_scan_node = dynamic_cast<vectorized::NewOlapScanNode*>(node);
-        if (!new_olap_scan_node) {
-            return Status::InternalError("Just suppourt NewOlapScanNode in pipeline");
-        }
+        auto* new_olap_scan_node = assert_cast<vectorized::NewOlapScanNode*>(node);
         OperatorTemplatePtr operator_t = std::make_shared<OlapScanOperatorTemplate>(
                 fragment_context->next_operator_template_id(), "OlapScanOperator",
                 new_olap_scan_node);
-        RETURN_IF_ERROR(cur_pipe->set_source(operator_t));
+        RETURN_IF_ERROR(cur_pipe->add_operator(operator_t));
         break;
     }
     case TPlanNodeType::EXCHANGE_NODE: {
         OperatorTemplatePtr operator_t = std::make_shared<ExchangeSourceOperatorTemplate>(
                 next_operator_template_id(), "ExchangeSourceOperator", node);
-        RETURN_IF_ERROR(cur_pipe->set_source(operator_t));
+        RETURN_IF_ERROR(cur_pipe->add_operator(operator_t));
         break;
     }
     case TPlanNodeType::AGGREGATION_NODE: {
-        auto* agg_node = dynamic_cast<vectorized::AggregationNode*>(node);
+        auto* agg_node = assert_cast<vectorized::AggregationNode*>(node);
         auto agg_ctx = std::make_shared<AggContext>();
         auto new_pipe = add_pipeline();
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipe));
@@ -312,13 +292,13 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         if (agg_node->is_streaming_preagg()) {
             OperatorTemplatePtr agg_source = std::make_shared<PreAggSourceOperatorTemplate>(
                     next_operator_template_id(), "PAggSourceOperator", agg_node, agg_ctx);
-            RETURN_IF_ERROR(cur_pipe->set_source(agg_source));
+            RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         } else {
-            // 如果这里去掉依赖，要修改agg sink的can_read方法
+            // TODO: Use can read to replace dependency
             cur_pipe->add_dependency(new_pipe);
             OperatorTemplatePtr agg_source = std::make_shared<FinalAggSourceOperatorTemplate>(
                     next_operator_template_id(), "FinalAggSourceOperator", agg_node);
-            RETURN_IF_ERROR(cur_pipe->set_source(agg_source));
+            RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         }
         break;
     }
@@ -341,6 +321,7 @@ Status PipelineFragmentContext::submit() {
     return Status::OK();
 }
 
+// construct sink operator
 Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
     OperatorTemplatePtr sink_;
     switch (thrift_sink.type) {

@@ -27,7 +27,6 @@ OlapScanOperator::OlapScanOperator(OperatorTemplate* operator_template,
 
 Status OlapScanOperator::init(const ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(ScanOperator::init(exec_node, state));
-    //    RETURN_IF_ERROR(_new_olap_scan_node->_init_profile()); 已经在NewOlapScanNode生成的时候执行了
     return Status::OK();
 }
 
@@ -41,7 +40,6 @@ OlapScanOperatorTemplate::OlapScanOperatorTemplate(uint32_t id, const std::strin
                                                    // TupleId o_tuple_id, int64_t limit_per_scanner,
                                                    vectorized::NewOlapScanNode* new_olap_scan_node)
         : ScanOperatorTemplate(id, name, dynamic_cast<ExecNode*>(new_olap_scan_node)),
-          //            _output_tuple_id(o_tuple_id), _limit_per_scanner(limit_per_scanner),
           _new_olap_scan_node(new_olap_scan_node) {}
 
 } // namespace doris::pipeline

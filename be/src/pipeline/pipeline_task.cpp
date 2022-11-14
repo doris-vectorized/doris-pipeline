@@ -23,7 +23,8 @@ namespace doris::pipeline {
 
 void PipelineTask::_init_profile() {
     std::stringstream ss;
-    ss << "PipelineTask" << " (index=" << _index << ")";
+    ss << "PipelineTask"
+       << " (index=" << _index << ")";
     auto* task_profile = new RuntimeProfile(ss.str());
     _parent_profile->add_child(task_profile, true, nullptr);
     _task_profile.reset(task_profile);
@@ -56,14 +57,13 @@ bool PipelineTask::has_dependency() {
     if (_pipeline->has_dependency()) {
         return true;
     }
-    // fe还未开启查询
-    if (!_state->get_query_fragments_ctx()->is_ready_to_execute()) {
+    // FE do not call execute
+    if (!_state->get_query_fragments_ctx()
+                 ->is_ready_to_execute()) { // TODO pipeline config::s_ready_to_execute
         return true;
     }
 
-    // 其他前置条件，如runtime filter
-    // ...
-
+    // runtime filter is a dependency
     _dependency_finish = true;
     return false;
 }
@@ -82,28 +82,29 @@ Status PipelineTask::open() {
 Status PipelineTask::execute(bool* eos) {
     SCOPED_TIMER(_task_profile->total_time_counter());
     int64_t time_spent = 0;
-    // 检查状态一定要是runnable
+    // The status must be runnable
     *eos = false;
     if (!_opened) {
         SCOPED_RAW_TIMER(&time_spent);
         RETURN_IF_ERROR(open());
     }
     while (_source->can_read() && _sink->can_write() && !_fragment_context->is_canceled()) {
-        // TODO pipeline sr
-        if (time_spent > 100'000'000L) {
+        if (time_spent > THREAD_TIME_SLICE) {
             break;
         }
-        SCOPED_RAW_TIMER(&time_spent); // pipeline TODO 这个方法后会清空数据么？
+        SCOPED_RAW_TIMER(&time_spent);
         _block->clear_column_data(_root->row_desc().num_materialized_slots());
         auto* block = _block.get();
+
+        // Pull block from operator chain
         {
             SCOPED_TIMER(_get_block_timer);
-                RETURN_IF_ERROR(_root->get_block(_state, block, eos));
+            RETURN_IF_ERROR(_root->get_block(_state, block, eos));
         }
         if (_block->rows() != 0 || *eos) {
             SCOPED_TIMER(_sink_timer);
             RETURN_IF_ERROR(_sink->sink(_state, block, *eos));
-            if (*eos) {
+            if (*eos) { // just return, the scheduler will do finish work
                 break;
             }
         }
@@ -122,13 +123,12 @@ Status PipelineTask::finalize() {
 
 Status PipelineTask::close() {
     auto s = _sink->close(_state);
-    for (auto op : _operators) {
+    for (auto& op : _operators) {
         auto tem = op->close(_state);
         if (!tem.ok() && s.ok()) {
             s = tem;
         }
     }
-    // 如果pipeline task是并发执行，则多个task执行结束才能close pipeline
     _pipeline->close(_state);
     return s;
 }

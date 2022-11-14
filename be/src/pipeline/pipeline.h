@@ -42,7 +42,6 @@ public:
     explicit Pipeline(PipelineId pipeline_id, std::shared_ptr<PipelineFragmentContext> context)
             : _complete_dependency(0), _pipeline_id(pipeline_id), _context(std::move(context)) {}
 
-    // 检查从root到source是一串
     Status prepare(RuntimeState* state);
 
     void close(RuntimeState*);
@@ -52,18 +51,16 @@ public:
         _dependencies.push_back(pipeline);
     }
 
-    // 如果所有依赖都结束，其状态是BLOCKED，则将Task提交到TaskScheduler
-    // pipeline执行完成要调用父pipeline的该方法
-    // 例如hash build完成后要调用hash probe的finish_one_dependency方法
+    // If all dependency be finished, the pipeline task shoule be scheduled
+    // pipeline is finish must call the parents `finish_one_dependency`
+    // like the condition variables.
+    // Eg: hash build finish must call the hash probe the method
     bool finish_one_dependency() {
         DCHECK(_complete_dependency < _dependencies.size());
         return _complete_dependency.fetch_add(1) == _dependencies.size() - 1;
     }
 
     bool has_dependency() { return _complete_dependency.load() < _dependencies.size(); }
-
-    // 把source插到operator中
-    Status set_source(OperatorTemplatePtr& source_operator);
 
     Status add_operator(OperatorTemplatePtr& op);
 
@@ -78,9 +75,8 @@ public:
 private:
     std::atomic<uint32_t> _complete_dependency;
 
-    OperatorTemplatePtr _source;
-    OperatorTemplates _operators; // left is _source, right is _root
-    OperatorTemplatePtr _sink;    // put block to sink
+    OperatorTemplates _operator_builders; // left is _source, right is _root
+    OperatorTemplatePtr _sink;            // put block to sink
 
     std::vector<std::shared_ptr<Pipeline>> _parents;
     std::vector<std::shared_ptr<Pipeline>> _dependencies;

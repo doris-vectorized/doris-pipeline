@@ -41,7 +41,6 @@ public:
     // Disallow copy and assignment.
     DisposableClosure(const DisposableClosure& other) = delete;
     DisposableClosure& operator=(const DisposableClosure& other) = delete;
-    // 为啥一个是move一个是直接赋值呢？
     void addFailedHandler(FailedFunc fn) { _failed_handler = std::move(fn); }
     void addSuccessHandler(SuccessFunc fn) { _success_handler = fn; }
 
@@ -126,7 +125,7 @@ void SinkBuffer::set_finishing() {
 
 bool SinkBuffer::is_pending_finish() const {
     for (auto& pair : _instance_to_package_queue_mutex) {
-        std::unique_lock<std::shared_mutex> write_lock(*(pair.second));
+        std::lock_guard<std::mutex> lock(*(pair.second));
         auto& id = pair.first;
         if (!_instance_to_sending_by_pipeline.at(id)) {
             return true;
@@ -143,7 +142,7 @@ void SinkBuffer::register_sink(TUniqueId fragment_instance_id) {
     if (_instance_to_package_queue_mutex.count(low_id)) {
         return;
     }
-    _instance_to_package_queue_mutex[low_id] = std::make_shared<std::shared_mutex>();
+    _instance_to_package_queue_mutex[low_id] = std::make_shared<std::mutex>();
     _instance_to_seq[low_id] = 0;
     _instance_to_package_queue[low_id] = std::queue<TransmitInfo, std::list<TransmitInfo>>();
     PUniqueId finst_id;
@@ -160,15 +159,12 @@ void SinkBuffer::add_block(const TransmitInfo& request) {
     TUniqueId ins_id = request.fragment_instance_id;
     bool send_now = false;
     {
-        std::unique_lock<std::shared_mutex> read_lock(*_instance_to_package_queue_mutex[ins_id.lo]);
-        // 如果没有正在处理的,则立即发送
+        std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[ins_id.lo]);
+        // Do not have in process rpc, directly send
         if (_instance_to_sending_by_pipeline[ins_id.lo]) {
             send_now = true;
             _instance_to_sending_by_pipeline[ins_id.lo] = false;
         }
-        // 像下面这样写是有问题的
-        //        std::queue<TransmitInfo, std::list<TransmitInfo>> &q = _instance_to_package_queue[ins_id.lo];
-        //        q.push(request);
         _instance_to_package_queue[ins_id.lo].push(request);
     }
     if (send_now) {
@@ -179,7 +175,7 @@ void SinkBuffer::add_block(const TransmitInfo& request) {
 // 该方法执行时，某InstanceLoId对应的队列不会存在正在发送的数据
 // 要在执行链退出时，将_instance_to_sending_by_pipeline[ins_id.lo] 设置为true
 void SinkBuffer::_send_rpc(InstanceLoId id) {
-    std::unique_lock<std::shared_mutex> write_lock(*_instance_to_package_queue_mutex[id]);
+    std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
     std::queue<TransmitInfo, std::list<TransmitInfo>>& q = _instance_to_package_queue[id];
     if (q.empty() || _is_finishing) {
         // rpc 的链退出了，因此需要让pipeline线程执行_send_rpc方法
@@ -206,8 +202,7 @@ void SinkBuffer::_send_rpc(InstanceLoId id) {
         _is_finishing = true;
         _state->set_is_cancelled(true);
         {
-            std::unique_lock<std::shared_mutex> write_lock(
-                    *_instance_to_package_queue_mutex[ctx.id]);
+            std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[ctx.id]);
             _instance_to_sending_by_pipeline[ctx.id] = true;
         }
     });
@@ -216,16 +211,14 @@ void SinkBuffer::_send_rpc(InstanceLoId id) {
                 Status s = Status(result.status());
                 if (!s.ok()) {
                     _is_finishing = true;
-                    _state->set_is_cancelled(true); // 应该cancel pipeline context
+                    _state->set_is_cancelled(true); // cancel pipeline context
                     {
-                        std::unique_lock<std::shared_mutex> write_lock(
-                                *_instance_to_package_queue_mutex[ctx.id]);
+                        std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[ctx.id]);
                         _instance_to_sending_by_pipeline[ctx.id] = true;
                     }
                 } else {
                     if (ctx.eos) {
-                        std::unique_lock<std::shared_mutex> write_lock(
-                                *_instance_to_package_queue_mutex[ctx.id]);
+                        std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[ctx.id]);
                         _instance_to_sending_by_pipeline[ctx.id] = true;
                     } else {
                         _send_rpc(ctx.id);
@@ -241,7 +234,7 @@ void SinkBuffer::_send_rpc(InstanceLoId id) {
     _closure->cntl.set_timeout_ms(10000); // 10s
 
     if (false) {
-        //TODO 支持http
+        //TODO Support HTTP interface
         //    && _parent->_transfer_large_data_by_brpc
         //        _brpc_request.has_block() &&
         //        _brpc_request.block().has_column_values() &&

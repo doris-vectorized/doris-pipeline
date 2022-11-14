@@ -60,11 +60,7 @@ public:
     void cancel(const PPlanFragmentCancelReason& reason = PPlanFragmentCancelReason::INTERNAL_ERROR,
                 const std::string& msg = "");
 
-    // TODO pipeline runtime filter
-    //    void set_merge_controller_handler(
-    //            std::shared_ptr<RuntimeFilterMergeControllerEntity>& handler) {
-    //        _merge_controller_handler = handler;
-    //    }
+    // TODO: Support pipeline runtime filter
 
     QueryFragmentsCtx* get_query_context() { return _query_ctx.get(); }
 
@@ -115,7 +111,6 @@ private:
     std::unique_ptr<DataSink> _sink;
 
     std::shared_ptr<QueryFragmentsCtx> _query_ctx;
-    // TODO pipeline runtime filter
 
     // If set the true, this plan fragment will be executed only after FE send execution start rpc.
     bool _need_wait_execution_trigger = false;

@@ -35,7 +35,7 @@ public:
     ExchangeSinkOperator(OperatorTemplate* operator_template, vectorized::VDataStreamSender* sink);
     ~ExchangeSinkOperator();
     Status init(const ExecNode* exec_node, RuntimeState* state = nullptr) override;
-    Status init(const TDataSink& tsink);
+    Status init(const TDataSink& tsink) override;
 
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
@@ -69,8 +69,8 @@ private:
 
 private:
     template <typename Channels>
-    Status channel_add_rows(Channels& channels, int num_channels, uint64_t* channel_ids, int rows,
-                            vectorized::Block* block, bool eos);
+    Status channel_add_rows(Channels& channels, int num_channels, const uint64_t* channel_ids,
+                            int rows, vectorized::Block* block, bool eos);
 
     // copy from vdata_stream_sender.h
     Status get_partition_column_result(vectorized::Block* block, int* result) const {

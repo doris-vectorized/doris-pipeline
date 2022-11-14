@@ -43,9 +43,7 @@ Status FinalAggSourceOperator::open(RuntimeState* state) {
 }
 
 bool FinalAggSourceOperator::can_read() {
-    // TODO pipeline
-    // 如果agg source所在pipeline和agg sink所在pipeline的依赖关系去掉
-    // 要判断agg已经完成，且还有数据
+    // TODO: Rethink use can_read() to replace the dependency
     return true;
 }
 

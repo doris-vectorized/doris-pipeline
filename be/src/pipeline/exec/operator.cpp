@@ -76,7 +76,6 @@ Status Operator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-// 释放资源
 Status Operator::close(RuntimeState* state) {
     if (_is_closed) {
         return Status::OK();
@@ -107,7 +106,7 @@ const RowDescriptor& Operator::row_desc() {
 
 Status OperatorTemplate::prepare(doris::RuntimeState* state) {
     _state = state;
-    // runtime filter ,目前已经由VScanNode处理
+    // runtime filter, now dispose by NewOlapScanNode
     return Status::OK();
 }
 

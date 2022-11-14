@@ -23,9 +23,10 @@ namespace doris::pipeline {
 
 Status Pipeline::prepare(RuntimeState* state) {
     std::stringstream ss;
-    ss << "Pipeline" << " (pipeline id=" << _pipeline_id << ")";
+    ss << "Pipeline"
+       << " (pipeline id=" << _pipeline_id << ")";
     _pipeline_profile.reset(new RuntimeProfile(ss.str()));
-    for (auto& op : _operators) {
+    for (auto& op : _operator_builders) {
         RETURN_IF_ERROR(op->prepare(state));
     }
     RETURN_IF_ERROR(_sink->prepare(state));
@@ -34,7 +35,7 @@ Status Pipeline::prepare(RuntimeState* state) {
 
 Status Pipeline::build_operators(Operators& operators) {
     OperatorPtr pre;
-    for (auto& operator_t : _operators) {
+    for (auto& operator_t : _operator_builders) {
         auto o = operator_t->build_operator();
         RETURN_IF_ERROR(o->init(operator_t->exec_node(), _context->get_runtime_state()));
         if (pre) {
@@ -47,36 +48,17 @@ Status Pipeline::build_operators(Operators& operators) {
 }
 
 void Pipeline::close(RuntimeState* state) {
-    Status rt_s = Status::OK();
-    for (auto& op : _operators) {
+    for (auto& op : _operator_builders) {
         op->close(state);
     }
     _sink->close(state);
 }
 
-Status Pipeline::set_source(OperatorTemplatePtr& source_) {
-    if (_source) {
-        return Status::InternalError("set source twice");
-    }
-    if (!_operators.empty()) {
+Status Pipeline::add_operator(OperatorTemplatePtr& op) {
+    if (_operator_builders.empty() && !op->is_source()) {
         return Status::InternalError("should set source before other operator");
     }
-    if (!source_->is_source()) {
-        return Status::InternalError("should set a source operator but {}", typeid(source_).name());
-    }
-    _source = source_;
-    _operators.emplace_back(_source);
-    return Status::OK();
-}
-
-Status Pipeline::add_operator(OperatorTemplatePtr& op) {
-    if (!_source) {
-        return Status::InternalError("should set source first");
-    }
-    if (_sink) {
-        return Status::InternalError("should set sink last.");
-    }
-    _operators.emplace_back(op);
+    _operator_builders.emplace_back(op);
     return Status::OK();
 }
 

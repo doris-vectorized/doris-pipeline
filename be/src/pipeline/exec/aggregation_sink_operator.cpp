@@ -94,10 +94,11 @@ Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, b
         }
 
         if (UNLIKELY(eos)) {
-            // 必须全部取出放到队列中
+            // must push all result block to queue
             bool get_eos = false;
             while (!get_eos) {
                 auto* bock_from_ctx = _agg_context->get_free_block();
+                // TODO: better call the method in agg source
                 ret = _agg_node->_executor.get_result(state, bock_from_ctx, &get_eos);
                 if (!ret.ok()) {
                     _agg_context->push_block(bock_from_ctx);
@@ -113,8 +114,6 @@ Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, b
                     COUNTER_SET(_rows_returned_counter, _num_rows_returned);
                 }
             }
-            // 尽快出发下游结束，这里不在finalize中做。
-            // 但是要在每个循环中都对eos做判断。可以权衡考虑放到finalize中。
             _agg_context->set_finish();
         }
     }
@@ -125,7 +124,7 @@ Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, b
 Status AggSinkOperator::close(RuntimeState* state) {
     // for poc
     if (_agg_context && !_agg_context->is_finish()) {
-        // finish应该已经在结束时候设置了，如果没有设置说明出错了。
+        // finish should be set, if not set here means error.
         _agg_context->set_canceled();
     }
     return Status::OK();
