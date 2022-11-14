@@ -111,10 +111,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
     if (_part_type == TPartitionType::UNPARTITIONED || _part_type == TPartitionType::RANDOM) {
-        // sink 已经shuffle了，这里按照sink的channels初始化的
-        //        std::random_device rd;
-        //        std::mt19937 g(rd());
-        //        shuffle(_channels.begin(), _channels.end(), g);
+        // TODO: Supoort the partion shuffle way
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         if (_state->query_options().__isset.enable_new_shuffle_hash_method) {
@@ -265,7 +262,7 @@ Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
         // 1. calculate range
         // 2. dispatch rows to channel
     }
-    if(block) {
+    if (block) {
         _num_rows_returned += block->rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
@@ -284,7 +281,7 @@ Status ExchangeSinkOperator::close(RuntimeState* state) {
 
 template <typename Channels>
 Status ExchangeSinkOperator::channel_add_rows(Channels& channels, int num_channels,
-                                              uint64_t* __restrict channel_ids, int rows,
+                                              const uint64_t* __restrict channel_ids, int rows,
                                               vectorized::Block* block, bool eos) {
     std::vector<int> channel2rows[num_channels];
     for (int i = 0; i < rows; ++i) {
@@ -324,17 +321,16 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
 }
 
 Status ExchangeSinkOperator::Channel::send_block(std::shared_ptr<PBlock> block, bool eos) {
-    if (eos) { // 非频繁判断
+    if (eos) {
         if (_eos_send) {
-            LOG(INFO) << "eos send ";
             return Status::OK();
         } else {
             _eos_send = true;
         }
     }
-    // 这里block已经拿到了所有权
-    _parent->_sink_buffer->add_block({_fragment_instance_id, // 不用每次都拷贝
-                                      false, _brpc_stub, std::move(block), false, eos});
+
+    _parent->_sink_buffer->add_block(
+            {_fragment_instance_id, false, _brpc_stub, std::move(block), false, eos});
     return Status::OK();
 }
 
@@ -371,7 +367,7 @@ Status ExchangeSinkOperator::Channel::add_rows(vectorized::Block* block,
 Status ExchangeSinkOperator::Channel::flush_block(bool eos) {
     std::shared_ptr<PBlock> block_ptr;
     if (_mutable_block) {
-        block_ptr.reset(new PBlock()); // 对象池？
+        block_ptr.reset(new PBlock()); // TODO: need a pool of PBlock()
         auto block = _mutable_block->to_block();
         RETURN_IF_ERROR(_parent->serialize_block(&block, block_ptr.get()));
         block.clear_column_data();

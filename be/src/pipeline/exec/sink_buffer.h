@@ -44,12 +44,9 @@ struct TransmitInfo {
 struct ClosureContext {
     InstanceLoId id;
     bool eos;
-    //    int64_t sequence;
-    //    int64_t send_timestamp;
 };
 
-// 一个ExchangeSinkOperator对应一个SinkBuffer
-// TODO pipeline sr
+// Each ExchangeSinkOperator have one SinkBuffer
 class SinkBuffer {
 public:
     SinkBuffer(PUniqueId, int, PlanNodeId, RuntimeState*);
@@ -64,13 +61,13 @@ public:
     void close();
 
 private:
-    // sr 使用的是 bthread的mutex
-    phmap::flat_hash_map<InstanceLoId, std::shared_ptr<std::shared_mutex>>
+    // TODO: rethink here should use std::shared_ptr, seems useless
+    phmap::flat_hash_map<InstanceLoId, std::shared_ptr<std::mutex>>
             _instance_to_package_queue_mutex;
     phmap::flat_hash_map<InstanceLoId, std::queue<TransmitInfo, std::list<TransmitInfo>>>
             _instance_to_package_queue;
     using PackageSeq = int64_t;
-    // 需要初始化为0
+    // must init zero
     phmap::flat_hash_map<InstanceLoId, PackageSeq> _instance_to_seq;
     phmap::flat_hash_map<InstanceLoId, std::unique_ptr<PTransmitDataParams>> _instance_to_request;
     phmap::flat_hash_map<InstanceLoId, PUniqueId> _instance_to_finst_id;
@@ -84,7 +81,7 @@ private:
     std::atomic<int> _finished_sink;
     PUniqueId _query_id;
     PlanNodeId _dest_node_id;
-    // Sender instance id, unique within a fragment. StreamSender中保存了该变量
+    // Sender instance id, unique within a fragment. StreamSender save the variable
     int _sender_id;
     int _be_number;
 
@@ -92,7 +89,7 @@ private:
 
 private:
     void _send_rpc(InstanceLoId);
-    // 要拿到_instance_to_package_queue_mutex[id]锁进行操作
+    // must hold the _instance_to_package_queue_mutex[id] mutex to opera
     void construct_request(InstanceLoId id) {
         _instance_to_request[id] = std::make_unique<PTransmitDataParams>();
         _instance_to_request[id]->set_allocated_finst_id(&_instance_to_finst_id[id]);

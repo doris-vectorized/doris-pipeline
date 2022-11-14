@@ -30,11 +30,11 @@ ScanOperator::ScanOperator(OperatorTemplate* operator_template,
 
 Status ScanOperator::init(const ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
-    //    RETURN_IF_ERROR(_scan_node->_init_profile()); // 孩子会执行_init_profile，比如OlapScanOperator
+    //    RETURN_IF_ERROR(_scan_node->_init_profile()); // subclass should call _init_profile，eg: OlapScanOperator
     return Status::OK();
 }
 
-// VScanNode::init 中调用了VScanNode::_register_runtime_filter，并生成了VScanNode::_runtime_filter_ctxs
+// VScanNode::init call the VScanNode::_register_runtime_filter, gen the generate VScanNode::_runtime_filter_ctxs
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // init profile for runtime filter
@@ -42,7 +42,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
         rf_ctx.runtime_filter->init_profile(_scan_node->runtime_profile());
     }
 
-    // scan node在构造函数里就把两个id设置好了
+    // Scan node set the two in ctor
     _scan_node->_input_tuple_desc =
             state->desc_tbl().get_tuple_descriptor(_scan_node->_input_tuple_id);
     _scan_node->_output_tuple_desc =
@@ -52,7 +52,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
 Status ScanOperator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::open(state));
-    RETURN_IF_ERROR(_scan_node->_acquire_runtime_filter(false)); // 在次之前，
+    RETURN_IF_ERROR(_scan_node->_acquire_runtime_filter(false));
     RETURN_IF_ERROR(_scan_node->_process_conjuncts());
 
     std::list<doris::vectorized::VScanner*> scanners;
@@ -69,13 +69,13 @@ Status ScanOperator::open(RuntimeState* state) {
 
 bool ScanOperator::can_read() {
     if (_eos || !_scanner_ctx || _scanner_ctx->done() || _scanner_ctx->can_finish()) {
-        // _eos:需要结束
-        // !_scanner_ctx:需要open
-        // _scanner_ctx->done():需要结束
-        // _scanner_ctx->can_finish():需要触发scan调度
+        // _eos: need eos
+        // !_scanner_ctx: need call open
+        // _scanner_ctx->done(): need finish
+        // _scanner_ctx->can_finish(): should be scheduled
         return true;
     } else {
-        return !_scanner_ctx->empty_in_queue(); // 有数据了
+        return !_scanner_ctx->empty_in_queue(); // have block to process
     }
 }
 
@@ -88,8 +88,6 @@ Status ScanOperator::get_block(RuntimeState* state, vectorized::Block* block, bo
     }
 
     if (_eos) {
-        LOG(INFO) << "llj log ScanOperator block eos"
-                  << "";
         *eos = true;
         return Status::OK();
     }
@@ -122,7 +120,7 @@ bool ScanOperator::is_pending_finish() {
 }
 
 Status ScanOperator::close(RuntimeState* state) {
-    // TODO pipeline scan 将VScanNode的profilecopy过来
+    // TODO pipeline scan get profile from scan node
     if (is_closed()) {
         return Status::OK();
     }

@@ -35,7 +35,7 @@ public:
         return Status::OK();
     }
 
-    Status init(const TDataSink& tsink);
+    Status init(const TDataSink& tsink) override;
 
     Status prepare(RuntimeState* state) override;
 

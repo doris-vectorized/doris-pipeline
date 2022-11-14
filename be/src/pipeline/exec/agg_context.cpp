@@ -71,7 +71,7 @@ Status AggContext::get_block(vectorized::Block** block, bool* eos) {
 
 bool AggContext::has_enough_space_to_push() {
     std::unique_lock<std::mutex> l(_transfer_lock);
-    return _cur_bytes_in_queue < _max_bytes_in_queue / 2;
+    return _cur_bytes_in_queue < MAX_BYTE_OF_QUEUE / 2;
 }
 
 void AggContext::push_block(vectorized::Block* block) {

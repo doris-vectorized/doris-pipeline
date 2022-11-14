@@ -24,19 +24,20 @@
 namespace doris::pipeline {
 
 enum PipelineTaskState : uint8_t {
-    NOT_READY = 0, // 没有prepare
+    NOT_READY = 0, // do not prepare
     BLOCKED = 1,   // have some dependencies not finished or some conditions not met
     BLOCKED_FOR_DEPENDENCY = 2,
     BLOCKED_FOR_SOURCE = 3,
     BLOCKED_FOR_SINK = 4,
 
-    RUNNABLE = 5,  // 可执行
-    PENDING_FINISH = 6, // 计算任务已结束，但资源还不能释放，例如有scan任务或sink任务
-    FINISHED = 7, // 正常结束
-    CANCELED = 8  // 异常结束
+    RUNNABLE = 5, // can execute
+    PENDING_FINISH =
+            6, // compute task is over, but still hold resource. like some scan and sink task
+    FINISHED = 7,
+    CANCELED = 8
 };
 
-// 非多线程安全
+// The class do the pipeline task. Minest schdule union by task scheduler
 class PipelineTask {
 public:
     PipelineTask(PipelinePtr& pipeline, uint32_t index, RuntimeState* state, Operators& operators,
@@ -57,25 +58,20 @@ public:
 
     Status prepare(RuntimeState* state);
 
-    // 执行pipeline，以时间片为调度
-    // 以sink和source的状态返回pipeline task的状态
     Status execute(bool* eos);
 
-    // 释放资源,可能是cancel
+    // if the pipeline create a bunch of pipeline task
+    // must be call after all pipeline task is finish to release resource
     Status close();
+
     PipelineTaskState get_state() { return _cur_state; }
 
-    void set_state(PipelineTaskState state) {
-        // DCHECK state 状态是否正常
-        _cur_state = state;
-    }
+    void set_state(PipelineTaskState state) { _cur_state = state; }
 
     bool is_pending_finish() { return _source->is_pending_finish() || _sink->is_pending_finish(); }
 
-    // 当该方法返回true时，表示该task应该被BlockedTaskScheduler check
     bool is_blocking() { return has_dependency() || !_source->can_read() || !_sink->can_write(); }
 
-    // task执行完成
     Status finalize();
 
     void finish_p_dependency() {
@@ -97,6 +93,8 @@ public:
     uint32_t index() { return _index; }
 
     OperatorPtr get_root() { return _root; }
+
+    static constexpr auto THREAD_TIME_SLICE = 100'000'000L;
 
 private:
     Status open();

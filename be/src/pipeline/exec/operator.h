@@ -27,37 +27,20 @@
 
 namespace doris::pipeline {
 
-// 1. 每次scan结束和sink结束后去测试pipeline是否可以调度
-//    scan线程、sink线程、执行线程都会对调度数据结构(全局调度队列)进行修改，冲突线程数为scan线程数+sink线程数+woker线程数，由于sink
-//    线程数较多，因此sink间并发可能受影响
-// 2. pipeline从scan拿数据时，如果拿到的结果是NO_MORE_DATA，则注册scan回调
-//            向sink发送数据时，如果拿到的结果是SINK_BUSY，则注册sink回调
-//    还没有类似实现
-//    回调方式的坏处？？
-// 3. 每个pipeline的scan和sink都由一个transform线程阻塞控制，scan transform拿到数据后测试pipeline是否可以调度，sink transform线程
-//    发送数据后测试pipeline是否可以调度
-//    好处：scan和sink不会被阻塞
-//    坏处：冲突线程数变成了pipeline个数 * 2 + worker个数；会产生大量的阻塞线程
-// 4. 参考Starrocks，由单独的线程负责调度（浪费一个核心频繁探测）【暂定方案】
-//    好处：有既定实现可以参考
-//    坏处：限制思路；调度线程可能成为性能瓶颈
-// 5. pipeline的task负责部分调度（处理pipeline间依赖关系，如最后一个pipeline task负责将它依赖的pipeline task加入调度队列）
-//    + 方法4
-
-// 从source获取数据后的执行结果，初始为NO_MORE_DATA，如果
+// Result of source pull data, init state is NO_MORE_DATA
 enum class SourceState : uint8_t {
-    NO_MORE_DATA = 0, // 没有数据
-    MORE_DATA = 1,    // 还可以继续拉数据
-    FINISHED = 2      // 表示source的数据已经全部读取完毕
+    NO_MORE_DATA = 0, //
+    MORE_DATA = 1,    // Still have data can read
+    FINISHED = 2
 };
 
 //
 enum class SinkState : uint8_t {
-    SINK_IDLE = 0, // 可以向sink中继续发送数据
-    SINK_BUSY = 1, // sink已经满了，需要等sink将数据发送一部分
-    FINISHED = 2   //表示sink不需要更多数据进入
+    SINK_IDLE = 0, // can send block to sink
+    SINK_BUSY = 1, // sink buffer is full， should wait sink to send some block
+    FINISHED = 2
 };
-////////////////        暂时用不到上面        ////////////////
+////////////////       DO NOT USE THE UP State     ////////////////
 
 class OperatorTemplate;
 class Operator;
@@ -68,32 +51,31 @@ using Operators = std::vector<OperatorPtr>;
 class Operator {
 public:
     explicit Operator(OperatorTemplate* operator_template);
-    virtual ~Operator() = default; // shared ptr要求析构父类时，能够调用正确的子类析构函数
+    virtual ~Operator() = default;
 
-    // sink 和 source都要感知cancel的情况，再cancel时及时终止
+    // After both sink and source need to know the cancel state.
+    // do cancel work
     bool is_sink() const;
 
     bool is_source() const;
 
-    // 初始化一些对象，在构造函数中并能失败，在这里可以失败
-    // init profile todo
-    // 被ExecNode构造出来后就调用该方法
-    // 子类应该先执行Operator::init
+    // Should be call after ExecNode is constructed
     virtual Status init(const ExecNode* exec_node, RuntimeState* state = nullptr);
 
-    // 参照ExecNode，准备需要的数据结构，比如profile
-    // 在rpc中调用
+    // Only result sink and data stream sink need to impl the virtual function
+    virtual Status init(const TDataSink& tsink) { return Status::OK(); };
+
+    // Do prepare some state of Operator
     virtual Status prepare(RuntimeState* state);
 
-    // 参照ExecNode，在pipeline task首次执行时调用，不能阻塞，不能中断
-    // 在pipeline前置依赖都结束时执行open
-    // a 依赖 c & b 依赖 c，则a、b都执行完成后，在worker中执行c的open
-    // 第一版pipeline，doris的pipeline中只有一个task，因此这样操作不会是性能瓶颈，但是如果一个pipeline是多个
-    // 并发task，则要考虑
-    // sr 将一些open的行为放到了prepare中
+    // Like ExecNode，when pipeline task first time be schduled， can't block
+    // the pipeline should be open after dependencies is finish
+    // Eg a -> c, b-> c, after a, b pipeline finish, c pipeline should call open
+    // Now the pipeline only have one task, so the there is no performance bottleneck for the mechanism，
+    // but if one pipeline have multi task to parallel work, need to rethink the logic
     virtual Status open(RuntimeState* state);
 
-    // 释放资源，不能阻塞，不能中断，
+    // Release the resource, should not block the thread
     virtual Status close(RuntimeState* state);
 
     Status set_child(OperatorPtr child) {
@@ -104,7 +86,6 @@ public:
         return Status::OK();
     }
 
-    // 没有scanner运行或有未读取的block
     virtual bool can_read() { return false; } // for source
 
     virtual bool can_write() { return false; } // for sink
@@ -129,13 +110,13 @@ public:
         return Status::NotSupported(error_msg.str());
     }
 
-    // close被调用且
-    // - 对于source来说，scan线程未全部退出
-    // - 对于rpc sink来说，rpc未全部处理完成
-    // - 否则返回false
+    // close be called
+    // - Source: scan thread do not exist
+    // - Sink: RPC do not be disposed
+    // - else return false
     virtual bool is_pending_finish() { return false; }
 
-    // close且非pending_finish
+    // TODO: should we keep the function
     // virtual bool is_finished() = 0;
 
     bool is_closed() const { return _is_closed; }
@@ -144,7 +125,6 @@ public:
 
     /// Only use in vectorized exec engine to check whether reach limit and cut num row for block
     // and add block rows for profile
-    // 参考ExecNode的reached_limit
     void reached_limit(vectorized::Block* block, bool* eos);
 
     const OperatorTemplate* operator_template() const { return _operator_template; }
@@ -189,9 +169,10 @@ public:
     virtual bool is_sink() const { return false; }
     virtual bool is_source() const { return false; }
 
-    // 处理所有operator共有的对象
+    // create the object used by all operator
     virtual Status prepare(RuntimeState* state);
-    // 关闭所有operator共有的对象
+
+    // destory the object used by all operator
     virtual void close(RuntimeState* state);
 
     std::string get_name() const { return _name; }

@@ -45,7 +45,7 @@ public:
 
     void set_factor_for_normal(double factor_for_normal) { _factor_for_normal = factor_for_normal; }
 
-    // TODO pipeline 1 有没有可能会溢出？？？
+    // TODO pipeline 1 may overflow here ?
     double total_consume_time() { return _total_consume_time.load() / _factor_for_normal; }
 
     bool empty() { return _queue.empty(); }
@@ -54,18 +54,20 @@ private:
     std::queue<PipelineTask*> _queue;
     // factor for normalization
     double _factor_for_normal = 1;
-    // TODO pipeline 需不需要一个归0的操作 1
+    // TODO pipeline whether need to set to zero
+    // the value cal the queue task time consume, the WorkTaskQueue
+    // use it to find the min queue to take task work
     std::atomic<uint64_t> _total_consume_time = 0;
 };
 
-// 每个线程有自己的多级反馈队列
+// Each thread have private muti level queue
 class WorkTaskQueue {
 public:
     explicit WorkTaskQueue() : _closed(false) {
         double factor = 1;
         for (int i = SUB_QUEUE_LEVEL - 1; i >= 0; --i) {
             _sub_queues[i].set_factor_for_normal(factor);
-            factor *= 1.2;
+            factor *= LEVEL_QUEUE_TIME_FACTOR;
         }
     }
 
@@ -124,33 +126,30 @@ public:
         _wait_task.notify_one();
     }
 
-    // TODO pipeline 1 根据size作为每个核心的负载不准确
-    size_t size() {
-        std::unique_lock<std::mutex> lock(_work_size_mutex);
-        return _total_task_size;
-    }
+    // Get the each thread task size to do
+    size_t size() { return _total_task_size; }
 
 private:
-    static const size_t SUB_QUEUE_LEVEL = 5;
+    static constexpr auto LEVEL_QUEUE_TIME_FACTOR = 1.2;
+    static constexpr size_t SUB_QUEUE_LEVEL = 5;
     SubWorkTaskQueue _sub_queues[SUB_QUEUE_LEVEL];
     std::mutex _work_size_mutex;
     std::condition_variable _wait_task;
-    size_t _total_task_size = 0;
+    std::atomic<size_t> _total_task_size = 0;
     bool _closed;
 
 private:
-    // TODO pipeline 1
     size_t _compute_level(PipelineTask* task) { return 0; }
 };
 
-// 应该考虑核心之间的内存距离
+// Need consider NUMA architecture
 class TaskQueue {
 public:
     explicit TaskQueue(size_t core_size) : _core_size(core_size) {
-        _async_queue = new WorkTaskQueue[core_size];
+        _async_queue.reset(new WorkTaskQueue[core_size]);
     }
 
-    ~TaskQueue() { delete[] _async_queue; }
+    ~TaskQueue() = default;
 
     void close() {
         for (int i = 0; i < _core_size; ++i) {
@@ -158,10 +157,10 @@ public:
         }
     }
 
-    // 尝试从自己队列中拿task执行
+    // Get the task by core id. TODO: To think the logic is useful?
     PipelineTask* try_take(size_t core_id) { return _async_queue[core_id].try_take(); }
 
-    // not block，尝试从其他核心偷任务执行
+    // not block， steal task by other core queue
     PipelineTask* steal_take(size_t core_id) {
         DCHECK(core_id < _core_size);
         size_t next_id = core_id;
@@ -179,7 +178,7 @@ public:
         return nullptr;
     }
 
-    // TODO pipeline 1 增加超时接口
+    // TODO pipeline 1 add timeout interface, other queue may have new task
     PipelineTask* take(size_t core_id) { return _async_queue[core_id].take(); }
 
     void push_back(PipelineTask* task) {
@@ -199,8 +198,8 @@ public:
     int cores() const { return _core_size; }
 
 private:
-    WorkTaskQueue* _async_queue = nullptr;
-    size_t _core_size; // 有没有办法
+    std::unique_ptr<WorkTaskQueue[]> _async_queue;
+    size_t _core_size;
     std::atomic<size_t> _next_core = 0;
 };
 
@@ -210,7 +209,7 @@ public:
     explicit BlockedTaskScheduler(std::shared_ptr<TaskQueue> task_queue)
             : _task_queue(std::move(task_queue)), _started(false), _shutdown(false) {}
 
-    ~BlockedTaskScheduler();
+    ~BlockedTaskScheduler() = default;
 
     Status start();
     void shutdown();
@@ -247,7 +246,6 @@ public:
 
     Status schedule_task(PipelineTask* task);
 
-    // 应该是cpu核心的整倍数
     Status start();
 
     void shutdown();
@@ -259,6 +257,7 @@ public:
 private:
     std::unique_ptr<ThreadPool> _fix_thread_pool;
     std::shared_ptr<TaskQueue> _task_queue;
+    // TODO: why here need shared_ptr?
     std::vector<std::shared_ptr<std::atomic<bool>>> _markers;
     ExecEnv* _exec_env;
     std::shared_ptr<BlockedTaskScheduler> _blocked_task_scheduler;
