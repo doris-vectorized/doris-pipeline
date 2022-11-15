@@ -189,7 +189,6 @@ void SinkBuffer::_send_rpc(InstanceLoId id) {
 
     TransmitInfo& request = q.front();
     bool eos = request.eos;
-    q.pop();
     _instance_to_request[id]->set_eos(eos);
     auto p_block = request.block;
     if (p_block) {
@@ -263,6 +262,8 @@ void SinkBuffer::_send_rpc(InstanceLoId id) {
     if (p_block) {
         _instance_to_request[id]->release_block();
     }
+
+    q.pop();
 }
 
 } // namespace doris::pipeline
