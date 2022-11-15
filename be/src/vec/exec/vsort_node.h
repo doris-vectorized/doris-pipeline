@@ -41,6 +41,8 @@ public:
 
     virtual Status prepare(RuntimeState* state) override;
 
+    Status prepare_self(RuntimeState* state);
+
     virtual Status open(RuntimeState* state) override;
 
     virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
@@ -50,6 +52,8 @@ public:
     virtual Status reset(RuntimeState* state) override;
 
     virtual Status close(RuntimeState* state) override;
+
+    Sorter* get_sorter();
 
 protected:
     virtual void debug_string(int indentation_level, std::stringstream* out) const override;

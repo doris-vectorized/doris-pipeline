@@ -29,7 +29,6 @@ enum PipelineTaskState : uint8_t {
     BLOCKED_FOR_DEPENDENCY = 2,
     BLOCKED_FOR_SOURCE = 3,
     BLOCKED_FOR_SINK = 4,
-
     RUNNABLE = 5, // can execute
     PENDING_FINISH =
             6, // compute task is over, but still hold resource. like some scan and sink task

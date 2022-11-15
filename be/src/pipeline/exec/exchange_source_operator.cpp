@@ -42,21 +42,14 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
             _exchange_node->_runtime_profile.get(), _exchange_node->_is_merging,
             _exchange_node->_sub_plan_query_statistics_recvr);
     _exchange_node->_rows_returned_counter = _rows_returned_counter;
-
-    // TODO: Support merge exchange
-    if (_exchange_node->_is_merging) {
-        return Status::NotSupported("Not Implemented merging exchange source operator");
-    }
-    return Operator::prepare(state);
+    return _exchange_node->prepare(state);
 }
 
 Status ExchangeSourceOperator::open(RuntimeState* state) {
-    return Operator::open(state);
+    return _exchange_node->open(state);
 }
 
 bool ExchangeSourceOperator::can_read() {
-    // All sender queue of VDataStreamRecvr can read
-    // TODO pipeline 1
     return _exchange_node->_stream_recvr->has_data(0);
 }
 
