@@ -29,7 +29,7 @@ class VPartitionInfo;
 namespace pipeline {
 class SinkBuffer;
 
-// 目前 VDataStreamRecvr::SenderQueue::add_block 是阻塞的，因此，暂时不能支持local exchange
+// Now local exchange is not supported since VDataStreamRecvr is considered as a pipeline broker.
 class ExchangeSinkOperator : public Operator {
 public:
     ExchangeSinkOperator(OperatorTemplate* operator_template, vectorized::VDataStreamSender* sink);
@@ -87,22 +87,17 @@ public:
     friend class ExchangeSinkOperator;
     Channel(ExchangeSinkOperator* parent, TUniqueId instance_id, const TNetworkAddress& brpc_dest);
     Status init(RuntimeState* state);
-    // Copies a single row into this channel's output buffer and flushes buffer
-    // if it reaches capacity.
-    // Returns error status if any of the preceding rpcs failed, OK otherwise.
-    //Status add_row(TupleRow* row);
 
-    // Asynchronously sends a row batch.
+    // Asynchronously sends a block
     // Returns the status of the most recently finished transmit_data
     // rpc (or OK if there wasn't one that hasn't been reported yet).
     // if batch is nullptr, send the eof packet
-    // 直接发送一个block
     Status send_block(std::shared_ptr<PBlock> block, bool eos = false);
 
-    // 添加一个block中的部分行到_mutable_block，
+    // Add some rows of block to _mutable_block，
     Status add_rows(vectorized::Block*, const std::vector<int>&);
 
-    //发送_mutable_block
+    // send _mutable_block
     Status flush_block(bool eos = false);
 
 private:

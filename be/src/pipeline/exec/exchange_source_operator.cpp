@@ -35,14 +35,8 @@ Status ExchangeSourceOperator::init(const ExecNode* exec_node, RuntimeState* sta
 }
 
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
-    _exchange_node->_sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
-    _exchange_node->_stream_recvr = state->exec_env()->vstream_mgr()->create_recvr(
-            state, _exchange_node->_input_row_desc, state->fragment_instance_id(),
-            _exchange_node->_id, _exchange_node->_num_senders, config::exchg_node_buffer_size_bytes,
-            _exchange_node->_runtime_profile.get(), _exchange_node->_is_merging,
-            _exchange_node->_sub_plan_query_statistics_recvr);
     _exchange_node->_rows_returned_counter = _rows_returned_counter;
-    return _exchange_node->prepare(state);
+    return Status::OK();
 }
 
 Status ExchangeSourceOperator::open(RuntimeState* state) {

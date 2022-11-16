@@ -177,6 +177,8 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
         static_cast<vectorized::VExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
+    // All prepare work do in exec node tree
+    RETURN_IF_ERROR(_root_plan->prepare(_runtime_state.get()));
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;

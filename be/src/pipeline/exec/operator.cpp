@@ -61,10 +61,6 @@ Status Operator::link_profile(RuntimeProfile* parent) {
 Status Operator::prepare(RuntimeState* state) {
     _mem_tracker = std::make_unique<MemTracker>("Operator:" + _runtime_profile->name(),
                                                 _runtime_profile.get());
-    // for poc
-    if (_operator_template->exec_node()) {
-        RETURN_IF_ERROR(_operator_template->exec_node()->prepare_self(state));
-    }
     return Status::OK();
 }
 

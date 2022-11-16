@@ -40,8 +40,6 @@ public:
 
     Status open(RuntimeState* state) override;
 
-    Status prepare(RuntimeState* state) override;
-
     Status close(RuntimeState* state) override;
 
     // return can write continue
@@ -52,7 +50,7 @@ public:
     bool can_write() override { return !_sort_context->finalized; };
 
 private:
-    vectorized::VSortNode* _sort_node;
+    [[maybe_unused]] vectorized::VSortNode* _sort_node;
     std::shared_ptr<SortContext> _sort_context;
 };
 

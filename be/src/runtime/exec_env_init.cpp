@@ -175,11 +175,11 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 }
 
 Status ExecEnv::init_pipeline_task_scheduler() {
-    int cores = config::pipeline_task_size;
-    if (cores <= 0) {
-        cores = CpuInfo::num_cores();
+    auto executors_size = config::pipeline_executor_size;
+    if (executors_size <= 0) {
+        executors_size = CpuInfo::num_cores();
     }
-    auto t_queue = std::make_shared<pipeline::TaskQueue>(cores);
+    auto t_queue = std::make_shared<pipeline::TaskQueue>(executors_size);
     auto b_scheduler = std::make_shared<pipeline::BlockedTaskScheduler>(t_queue);
     _pipeline_task_scheduler = new pipeline::TaskScheduler(this, b_scheduler, t_queue);
     RETURN_IF_ERROR(_pipeline_task_scheduler->start());

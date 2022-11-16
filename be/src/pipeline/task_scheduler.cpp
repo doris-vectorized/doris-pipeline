@@ -140,7 +140,7 @@ void BlockedTaskScheduler::_schedule() {
 void BlockedTaskScheduler::_make_task_run(std::list<PipelineTask*>& local_tasks,
                                           std::list<PipelineTask*>::iterator& task_itr,
                                           std::vector<PipelineTask*>& ready_tasks) {
-    auto& task = *task_itr;
+    auto task = *task_itr;
     local_tasks.erase(task_itr++);
     ready_tasks.emplace_back(task);
 }
@@ -162,7 +162,7 @@ Status TaskScheduler::start() {
     _markers.reserve(cores);
     for (size_t i = 0; i < cores; ++i) {
         LOG(INFO) << "Start TaskScheduler thread " << i;
-        _markers.push_back(std::make_shared<std::atomic<bool>>(true));
+        _markers.push_back(std::make_unique<std::atomic<bool>>(true));
         RETURN_IF_ERROR(
                 _fix_thread_pool->submit_func(std::bind(&TaskScheduler::_do_work, this, i)));
     }
@@ -184,7 +184,7 @@ Status TaskScheduler::schedule_task(PipelineTask* task) {
 void TaskScheduler::_do_work(size_t index) {
     LOG(INFO) << "Start TaskScheduler worker " << index;
     auto queue = _task_queue;
-    auto marker = _markers[index];
+    const auto& marker = _markers[index];
     while (*marker) {
         auto task = queue->try_take(index);
         if (!task) {

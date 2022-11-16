@@ -56,7 +56,7 @@ void Pipeline::close(RuntimeState* state) {
 
 Status Pipeline::add_operator(OperatorTemplatePtr& op) {
     if (_operator_builders.empty() && !op->is_source()) {
-        return Status::InternalError("should set source before other operator");
+        return Status::InternalError("Should set source before other operator");
     }
     _operator_builders.emplace_back(op);
     return Status::OK();

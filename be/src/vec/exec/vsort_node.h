@@ -41,8 +41,6 @@ public:
 
     virtual Status prepare(RuntimeState* state) override;
 
-    Status prepare_self(RuntimeState* state);
-
     virtual Status open(RuntimeState* state) override;
 
     virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
