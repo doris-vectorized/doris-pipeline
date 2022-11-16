@@ -143,6 +143,9 @@ void BlockedTaskScheduler::_make_task_run(std::list<PipelineTask*>& local_tasks,
     auto task = *task_itr;
     local_tasks.erase(task_itr++);
     ready_tasks.emplace_back(task);
+    if (task->get_state() == BLOCKED) {
+        task->set_state(RUNNABLE);
+    }
 }
 
 /////////////////////////  TaskScheduler  ///////////////////////////////////////////////////////////////////////////
@@ -215,6 +218,7 @@ void TaskScheduler::_do_work(size_t index) {
             continue;
         }
 
+        DCHECK(check_state == RUNNABLE);
         // task exec
         bool eos = false;
         auto status = task->execute(&eos);
@@ -245,14 +249,10 @@ void TaskScheduler::_do_work(size_t index) {
         auto pipeline_state = task->get_state();
         switch (pipeline_state) {
         case BLOCKED:
-        case PENDING_FINISH:
             _blocked_task_scheduler->add_blocked_task(task);
             break;
         case RUNNABLE:
             queue->push_back(task, index);
-            break;
-        case FINISHED:
-        case CANCELED:
             break;
         default:
             DCHECK(false);
