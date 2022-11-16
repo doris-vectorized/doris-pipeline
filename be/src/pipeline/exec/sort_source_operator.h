@@ -20,7 +20,6 @@
 #include <utility>
 
 #include "operator.h"
-#include "sort_context.h"
 
 namespace doris {
 
@@ -35,7 +34,7 @@ class SortSourceOperatorTemplate;
 class SortSourceOperator : public Operator {
 public:
     SortSourceOperator(SortSourceOperatorTemplate* operator_template,
-                       vectorized::VSortNode* sort_node, std::shared_ptr<SortContext> sort_context);
+                       vectorized::VSortNode* sort_node);
     Status init(const ExecNode*, RuntimeState*) override;
 
     Status open(RuntimeState* state) override;
@@ -44,30 +43,27 @@ public:
 
     Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
 
-    bool can_read() override { return _sort_context->finalized; }
+    bool can_read() override;
 
 private:
     vectorized::VSortNode* _sort_node;
-    std::shared_ptr<SortContext> _sort_context;
 };
 
 class SortSourceOperatorTemplate : public OperatorTemplate {
 public:
     SortSourceOperatorTemplate(int32_t id, const std::string& name,
-                               vectorized::VSortNode* sort_node,
-                               std::shared_ptr<SortContext> sort_context);
+                               vectorized::VSortNode* sort_node);
 
     bool is_sink() const override { return false; }
 
     bool is_source() const override { return true; }
 
     OperatorPtr build_operator() override {
-        return std::make_shared<SortSourceOperator>(this, _sort_node, _sort_context);
+        return std::make_shared<SortSourceOperator>(this, _sort_node);
     }
 
 private:
     vectorized::VSortNode* _sort_node;
-    std::shared_ptr<SortContext> _sort_context;
 };
 
 } // namespace pipeline

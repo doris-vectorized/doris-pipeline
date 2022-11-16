@@ -40,17 +40,7 @@ Status AggSinkOperator::prepare(RuntimeState* state) {
 
 Status AggSinkOperator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::open(state));
-    // open agg node
-    RETURN_IF_ERROR(vectorized::VExpr::open(_agg_node->_probe_expr_ctxs, state));
-    for (int i = 0; i < _agg_node->_aggregate_evaluators.size(); ++i) {
-        RETURN_IF_ERROR(_agg_node->_aggregate_evaluators[i]->open(state));
-    }
-    if (!_agg_node->is_streaming_preagg()) {
-        if (_agg_node->_probe_expr_ctxs.empty()) {
-            _agg_node->_create_agg_status(_agg_node->_agg_data.without_key);
-            _agg_node->_agg_data_created_without_key = true;
-        }
-    }
+    _agg_node->alloc_resource(state);
     return Status::OK();
 }
 

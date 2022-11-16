@@ -44,7 +44,7 @@ Status ExchangeSourceOperator::open(RuntimeState* state) {
 }
 
 bool ExchangeSourceOperator::can_read() {
-    return _exchange_node->_stream_recvr->has_data(0);
+    return _exchange_node->_stream_recvr->ready_to_read();
 }
 
 Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {

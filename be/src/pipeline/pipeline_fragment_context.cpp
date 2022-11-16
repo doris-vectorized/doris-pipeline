@@ -312,13 +312,12 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         auto new_pipeline = add_pipeline();
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipeline));
 
-        auto sort_context = std::make_shared<SortContext>(sort_node->get_sorter());
         OperatorTemplatePtr sort_sink = std::make_shared<SortSinkOperatorTemplate>(
-                next_operator_template_id(), "SortSinkOperatorTemplate", sort_node, sort_context);
+                next_operator_template_id(), "SortSinkOperatorTemplate", sort_node);
         RETURN_IF_ERROR(new_pipeline->set_sink(sort_sink));
-        cur_pipe->add_dependency(new_pipeline);
+
         OperatorTemplatePtr sort_source = std::make_shared<SortSourceOperatorTemplate>(
-                next_operator_template_id(), "SortSourceOperatorTemplate", sort_node, sort_context);
+                next_operator_template_id(), "SortSourceOperatorTemplate", sort_node);
         RETURN_IF_ERROR(cur_pipe->add_operator(sort_source));
         break;
     }

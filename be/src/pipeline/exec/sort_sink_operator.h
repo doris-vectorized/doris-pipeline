@@ -20,7 +20,6 @@
 #include <utility>
 
 #include "operator.h"
-#include "sort_context.h"
 
 namespace doris {
 
@@ -34,8 +33,7 @@ class SortSinkOperatorTemplate;
 
 class SortSinkOperator : public Operator {
 public:
-    SortSinkOperator(SortSinkOperatorTemplate* operator_template, vectorized::VSortNode* sort_node,
-                     std::shared_ptr<SortContext> sort_context);
+    SortSinkOperator(SortSinkOperatorTemplate* operator_template, vectorized::VSortNode* sort_node);
     Status init(const ExecNode*, RuntimeState*) override;
 
     Status open(RuntimeState* state) override;
@@ -45,31 +43,28 @@ public:
     // return can write continue
     Status sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
 
-    Status finalize(RuntimeState* state) override { return _sort_context->finalize(state); }
+    Status finalize(RuntimeState* state) override { return Status::OK(); }
 
-    bool can_write() override { return !_sort_context->finalized; };
+    bool can_write() override { return true; };
 
 private:
-    [[maybe_unused]] vectorized::VSortNode* _sort_node;
-    std::shared_ptr<SortContext> _sort_context;
+    vectorized::VSortNode* _sort_node;
 };
 
 class SortSinkOperatorTemplate : public OperatorTemplate {
 public:
-    SortSinkOperatorTemplate(int32_t id, const std::string& name, vectorized::VSortNode* sort_node,
-                             std::shared_ptr<SortContext> sort_context);
+    SortSinkOperatorTemplate(int32_t id, const std::string& name, vectorized::VSortNode* sort_node);
 
     bool is_sink() const override { return true; }
 
     bool is_source() const override { return false; }
 
     OperatorPtr build_operator() override {
-        return std::make_shared<SortSinkOperator>(this, _sort_node, _sort_context);
+        return std::make_shared<SortSinkOperator>(this, _sort_node);
     }
 
 private:
     vectorized::VSortNode* _sort_node;
-    std::shared_ptr<SortContext> _sort_context;
 };
 
 } // namespace pipeline

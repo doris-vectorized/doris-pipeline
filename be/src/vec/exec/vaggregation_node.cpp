@@ -448,10 +448,10 @@ Status AggregationNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status AggregationNode::open(RuntimeState* state) {
+Status AggregationNode::alloc_resource(doris::RuntimeState* state) {
     START_AND_SCOPE_SPAN(state->get_tracer(), span, "AggregationNode::open");
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
+    RETURN_IF_ERROR(ExecNode::alloc_resource(state));
     SCOPED_CONSUME_MEM_TRACKER(mem_tracker());
 
     RETURN_IF_ERROR(VExpr::open(_probe_expr_ctxs, state));
@@ -460,10 +460,6 @@ Status AggregationNode::open(RuntimeState* state) {
         RETURN_IF_ERROR(_aggregate_evaluators[i]->open(state));
     }
 
-    RETURN_IF_ERROR(_children[0]->open(state));
-
-    // Streaming preaggregations do all processing in GetNext().
-    if (_is_streaming_preagg) return Status::OK();
     // move _create_agg_status to open not in during prepare,
     // because during prepare and open thread is not the same one,
     // this could cause unable to get JVM
@@ -471,6 +467,16 @@ Status AggregationNode::open(RuntimeState* state) {
         _create_agg_status(_agg_data.without_key);
         _agg_data_created_without_key = true;
     }
+
+    return Status::OK();
+}
+
+Status AggregationNode::open(RuntimeState* state) {
+    RETURN_IF_ERROR(alloc_resource(state));
+    RETURN_IF_ERROR(_children[0]->open(state));
+
+    // Streaming preaggregations do all processing in GetNext().
+    if (_is_streaming_preagg) return Status::OK();
     bool eos = false;
     Block block;
     while (!eos) {
@@ -529,10 +535,7 @@ Status AggregationNode::get_next(RuntimeState* state, Block* block, bool* eos) {
     return Status::OK();
 }
 
-Status AggregationNode::close(RuntimeState* state) {
-    if (is_closed()) return Status::OK();
-    START_AND_SCOPE_SPAN(state->get_tracer(), span, "AggregationNode::close");
-
+void AggregationNode::release_resource(RuntimeState* state) {
     for (auto* aggregate_evaluator : _aggregate_evaluators) aggregate_evaluator->close(state);
     VExpr::close(_probe_expr_ctxs, state);
     if (_executor.close) _executor.close();
@@ -545,7 +548,13 @@ Status AggregationNode::close(RuntimeState* state) {
                 },
                 _agg_data._aggregated_method_variant);
     }
+    ExecNode::release_resource(state);
+}
 
+Status AggregationNode::close(RuntimeState* state) {
+    if (is_closed()) return Status::OK();
+    START_AND_SCOPE_SPAN(state->get_tracer(), span, "AggregationNode::close");
+    release_resource(state);
     return ExecNode::close(state);
 }
 

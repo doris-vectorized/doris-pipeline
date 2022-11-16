@@ -67,7 +67,7 @@ Status Operator::prepare(RuntimeState* state) {
 Status Operator::open(RuntimeState* state) {
     // for poc
     if (_operator_template->exec_node()) {
-        RETURN_IF_ERROR(_operator_template->exec_node()->open_self(state));
+        RETURN_IF_ERROR(_operator_template->exec_node()->alloc_resource(state));
     }
     return Status::OK();
 }
@@ -78,7 +78,7 @@ Status Operator::close(RuntimeState* state) {
     }
     _is_closed = true;
     if (_operator_template->exec_node()) {
-        _operator_template->exec_node()->close_self(state);
+        _operator_template->exec_node()->release_resource(state);
     }
     if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);

@@ -22,16 +22,12 @@
 namespace doris::pipeline {
 
 SortSourceOperatorTemplate::SortSourceOperatorTemplate(int32_t id, const string& name,
-                                                       vectorized::VSortNode* sort_node,
-                                                       std::shared_ptr<SortContext> sort_context)
-        : OperatorTemplate(id, name, sort_node),
-          _sort_node(sort_node),
-          _sort_context(sort_context) {}
+                                                       vectorized::VSortNode* sort_node)
+        : OperatorTemplate(id, name, sort_node), _sort_node(sort_node) {}
 
 SortSourceOperator::SortSourceOperator(SortSourceOperatorTemplate* operator_template,
-                                       vectorized::VSortNode* sort_node,
-                                       std::shared_ptr<SortContext> sort_context)
-        : Operator(operator_template), _sort_node(sort_node), _sort_context(sort_context) {}
+                                       vectorized::VSortNode* sort_node)
+        : Operator(operator_template), _sort_node(sort_node) {}
 
 Status SortSourceOperator::init(const doris::ExecNode* node, doris::RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(node, state));
@@ -47,11 +43,16 @@ Status SortSourceOperator::close(doris::RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-    return Operator::close(state);
+    _sort_node->release_resource(state);
+    return Status::OK();
+}
+
+bool SortSourceOperator::can_read() {
+    return _sort_node->can_read();
 }
 
 Status SortSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
-    return _sort_node->get_sorter()->get_next(state, block, eos);
+    return _sort_node->pull(state, block, eos);
 }
 
 } // namespace doris::pipeline

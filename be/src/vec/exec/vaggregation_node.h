@@ -742,7 +742,7 @@ private:
 };
 
 // not support spill
-class AggregationNode : public ::doris::ExecNode {
+class AggregationNode final : public ::doris::ExecNode {
 public:
     using Sizes = std::vector<size_t>;
 
@@ -752,9 +752,11 @@ public:
     Status prepare_profile(RuntimeState* state);
     virtual Status prepare(RuntimeState* state) override;
     virtual Status open(RuntimeState* state) override;
+    virtual Status alloc_resource(RuntimeState* state) override;
     virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     virtual Status get_next(RuntimeState* state, Block* block, bool* eos) override;
     virtual Status close(RuntimeState* state) override;
+    virtual void release_resource(RuntimeState* state) override;
     bool is_streaming_preagg() { return _is_streaming_preagg; }
 
 private:
@@ -826,6 +828,7 @@ private:
     std::unique_ptr<AggregateDataContainer> _aggregate_data_container;
 
 private:
+    void _release_self_resource(RuntimeState* state);
     /// Return true if we should keep expanding hash tables in the preagg. If false,
     /// the preagg should pass through any rows it can't fit in its tables.
     bool _should_expand_preagg_hash_tables();

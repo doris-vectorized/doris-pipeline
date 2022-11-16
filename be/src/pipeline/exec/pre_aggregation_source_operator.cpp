@@ -62,25 +62,7 @@ Status PreAggSourceOperator::get_block(RuntimeState* state, vectorized::Block* b
 }
 
 Status PreAggSourceOperator::close(RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::close(state));
-    for (auto* aggregate_evaluator : _agg_node->_aggregate_evaluators) {
-        aggregate_evaluator->close(state);
-    }
-    vectorized::VExpr::close(_agg_node->_probe_expr_ctxs, state);
-
-    if (_agg_node->_executor.close) {
-        _agg_node->_executor.close();
-    }
-
-    /// _hash_table_size_counter may be null if prepare failed.
-    if (_agg_node->_hash_table_size_counter) {
-        std::visit(
-                [&](auto&& agg_method) {
-                    COUNTER_SET(_agg_node->_hash_table_size_counter,
-                                int64_t(agg_method.data.size()));
-                },
-                _agg_node->_agg_data._aggregated_method_variant);
-    }
+    _agg_node->release_resource(state);
     return Status::OK();
 }
 

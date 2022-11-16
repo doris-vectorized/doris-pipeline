@@ -95,9 +95,10 @@ public:
     // Caller must not be holding any io buffers. This will cause deadlock.
     virtual Status open(RuntimeState* state);
 
+    // Alloc and open resource for the node
     // Only pipeline operator use exec node need to impl the virtual function
     // so only vectorized exec node need to impl
-    virtual Status open_self(RuntimeState* state);
+    virtual Status alloc_resource(RuntimeState* state);
 
     // Retrieves rows and returns them via row_batch. Sets eos to true
     // if subsequent calls will not retrieve any more rows.
@@ -114,9 +115,30 @@ public:
     // TODO: AggregationNode and HashJoinNode cannot be "re-opened" yet.
     virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos);
     virtual Status get_next(RuntimeState* state, vectorized::Block* block, bool* eos);
-
     // new interface to compatible new optimizers in FE
     Status get_next_after_projects(RuntimeState* state, vectorized::Block* block, bool* eos);
+
+    // Process data
+    // Eg: Projection, Union All, HashProbe
+    virtual Status execute(RuntimeState* state, vectorized::Block* input_block,
+                           vectorized::Block* output_block, bool* eos) {
+        return Status::OK();
+    }
+
+    // Emit data, both need impl with method: sink
+    // Eg: Aggregation, Sort
+    virtual Status pull(RuntimeState* state, vectorized::Block* output_block, bool* eos) {
+        return Status::OK();
+    }
+
+    bool can_read() const { return _can_read; }
+
+    // Sink Data to ExecNode to do some stock work, both need impl with method: get_result
+    // `eos` means source is exhausted, exec node should do some finalize work
+    // Eg: Aggregation, Sort
+    virtual Status sink(RuntimeState* state, vectorized::Block* input_block, bool eos) {
+        return Status::OK();
+    }
 
     // Resets the stream of row batches to be retrieved by subsequent GetNext() calls.
     // Clears all internal state, returning this node to the state it was in after calling
@@ -150,9 +172,10 @@ public:
     // each implementation should start out by calling the default implementation.
     virtual Status close(RuntimeState* state);
 
+    // Release and close resource for the node
     // Only pipeline operator use exec node need to impl the virtual function
     // so only vectorized exec node need to impl
-    virtual void close_self(RuntimeState* state);
+    virtual void release_resource(RuntimeState* state);
 
     // Creates exec node tree from list of nodes contained in plan via depth-first
     // traversal. All nodes are placed in pool.
@@ -380,9 +403,12 @@ protected:
     /// ExecNode::QueryMaintenance().
     virtual Status QueryMaintenance(RuntimeState* state, const std::string& msg) WARN_UNUSED_RESULT;
 
+    std::atomic<bool> _can_read = false;
+
 private:
     friend class pipeline::Operator;
     bool _is_closed;
+    bool _is_resource_released = false;
 };
 
 } // namespace doris

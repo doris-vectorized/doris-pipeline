@@ -235,7 +235,7 @@ Status ExecNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExecNode::open_self(RuntimeState* state) {
+Status ExecNode::alloc_resource(doris::RuntimeState* state) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     if (_vconjunct_ctx_ptr) {
         RETURN_IF_ERROR((*_vconjunct_ctx_ptr)->open(state));
@@ -249,7 +249,7 @@ Status ExecNode::open_self(RuntimeState* state) {
 }
 
 Status ExecNode::open(RuntimeState* state) {
-    return open_self(state);
+    return ExecNode::alloc_resource(state);
 }
 
 Status ExecNode::reset(RuntimeState* state) {
@@ -268,24 +268,27 @@ Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {
     return Status::OK();
 }
 
-void ExecNode::close_self(RuntimeState* state) {
-    if (_rows_returned_counter != nullptr) {
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    }
+void ExecNode::release_resource(doris::RuntimeState* state) {
+    if (!_is_resource_released) {
+        if (_rows_returned_counter != nullptr) {
+            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+        }
 
-    if (_vconjunct_ctx_ptr) {
-        (*_vconjunct_ctx_ptr)->close(state);
-    }
-    if (typeid(*this) != typeid(doris::vectorized::NewOlapScanNode)) {
-        Expr::close(_conjunct_ctxs, state);
-    }
-    vectorized::VExpr::close(_projections, state);
+        if (_vconjunct_ctx_ptr) {
+            (*_vconjunct_ctx_ptr)->close(state);
+        }
+        if (typeid(*this) != typeid(doris::vectorized::NewOlapScanNode)) {
+            Expr::close(_conjunct_ctxs, state);
+        }
+        vectorized::VExpr::close(_projections, state);
 
-    if (_buffer_pool_client.is_registered()) {
-        state->exec_env()->buffer_pool()->DeregisterClient(&_buffer_pool_client);
-    }
+        if (_buffer_pool_client.is_registered()) {
+            state->exec_env()->buffer_pool()->DeregisterClient(&_buffer_pool_client);
+        }
 
-    runtime_profile()->add_to_span();
+        runtime_profile()->add_to_span();
+        _is_resource_released = true;
+    }
 }
 
 Status ExecNode::close(RuntimeState* state) {
@@ -301,8 +304,7 @@ Status ExecNode::close(RuntimeState* state) {
             result = st;
         }
     }
-    close_self(state);
-
+    ExecNode::release_resource(state);
     return result;
 }
 

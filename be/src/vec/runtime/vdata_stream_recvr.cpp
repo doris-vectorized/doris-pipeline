@@ -347,6 +347,16 @@ bool VDataStreamRecvr::has_data(size_t n) {
     return !_sender_queues[n]->should_wait();
 }
 
+bool VDataStreamRecvr::ready_to_read() {
+    bool res = true;
+    for (size_t i = 0; i < _sender_queues.size(); i++) {
+        res &= has_data(i);
+        if (!res) break;
+    }
+
+    return res;
+}
+
 Status VDataStreamRecvr::get_next(Block* block, bool* eos) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     if (!_is_merging) {

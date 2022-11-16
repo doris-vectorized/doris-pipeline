@@ -71,6 +71,8 @@ public:
 
     bool has_data(size_t n);
 
+    bool ready_to_read();
+
     Status get_next(Block* block, bool* eos);
 
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }

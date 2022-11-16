@@ -22,16 +22,12 @@
 namespace doris::pipeline {
 
 SortSinkOperatorTemplate::SortSinkOperatorTemplate(int32_t id, const string& name,
-                                                   vectorized::VSortNode* sort_node,
-                                                   std::shared_ptr<SortContext> sort_context)
-        : OperatorTemplate(id, name, sort_node),
-          _sort_node(sort_node),
-          _sort_context(sort_context) {}
+                                                   vectorized::VSortNode* sort_node)
+        : OperatorTemplate(id, name, sort_node), _sort_node(sort_node) {}
 
 SortSinkOperator::SortSinkOperator(SortSinkOperatorTemplate* operator_template,
-                                   vectorized::VSortNode* sort_node,
-                                   std::shared_ptr<SortContext> sort_context)
-        : Operator(operator_template), _sort_node(sort_node), _sort_context(sort_context) {}
+                                   vectorized::VSortNode* sort_node)
+        : Operator(operator_template), _sort_node(sort_node) {}
 
 Status SortSinkOperator::init(const doris::ExecNode* node, doris::RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(node, state));
@@ -40,23 +36,16 @@ Status SortSinkOperator::init(const doris::ExecNode* node, doris::RuntimeState* 
 
 Status SortSinkOperator::open(doris::RuntimeState* state) {
     RETURN_IF_ERROR(Operator::open(state));
+    RETURN_IF_ERROR(_sort_node->alloc_resource(state));
     return Status::OK();
 }
 
 Status SortSinkOperator::close(doris::RuntimeState* state) {
-    if (is_closed()) {
-        return Status::OK();
-    }
-    return Operator::close(state);
+    return Status::OK();
 }
 
 Status SortSinkOperator::sink(doris::RuntimeState* state, vectorized::Block* block, bool eos) {
-    if (block->rows() > 0) {
-        RETURN_IF_ERROR(_sort_context->sorter->append_block(block));
-    }
-    if (eos) {
-        _sort_context->sorter->prepare_for_read();
-    }
+    RETURN_IF_ERROR(_sort_node->sink(state, block, eos));
     return Status::OK();
 }
 } // namespace doris::pipeline

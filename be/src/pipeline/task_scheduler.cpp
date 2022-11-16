@@ -101,6 +101,7 @@ void BlockedTaskScheduler::_schedule() {
                 }
             } else if (state == BLOCKED) {
                 if (!task->is_blocking()) {
+                    task->set_state(RUNNABLE);
                     _make_task_run(local_blocked_tasks, iter, ready_tasks);
                 } else {
                     iter++;
