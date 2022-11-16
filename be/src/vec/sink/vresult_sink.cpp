@@ -50,6 +50,7 @@ Status VResultSink::prepare_exprs(RuntimeState* state) {
     RETURN_IF_ERROR(VExpr::prepare(_output_vexpr_ctxs, state, _row_desc));
     return Status::OK();
 }
+
 Status VResultSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
     auto fragment_instance_id = state->fragment_instance_id();

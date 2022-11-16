@@ -33,7 +33,6 @@ Status AggSinkOperator::init(const ExecNode* exec_node, RuntimeState* state) {
 
 Status AggSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_agg_node->prepare_profile(state));
     _agg_node->_child_return_rows =
             std::bind<int64_t>(&AggSinkOperator::get_child_return_rows, this);
     return Status::OK();

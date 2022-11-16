@@ -38,11 +38,6 @@ Status SortSinkOperator::init(const doris::ExecNode* node, doris::RuntimeState* 
     return Status::OK();
 }
 
-Status SortSinkOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::prepare(state));
-    return _sort_node->prepare_self(state);
-}
-
 Status SortSinkOperator::open(doris::RuntimeState* state) {
     RETURN_IF_ERROR(Operator::open(state));
     return Status::OK();
@@ -57,12 +52,11 @@ Status SortSinkOperator::close(doris::RuntimeState* state) {
 
 Status SortSinkOperator::sink(doris::RuntimeState* state, vectorized::Block* block, bool eos) {
     if (block->rows() > 0) {
-        return _sort_context->sorter->append_block(block);
-    } else {
-        if (eos) {
-            _sort_context->sorter->prepare_for_read();
-        }
-        return Status::OK();
+        RETURN_IF_ERROR(_sort_context->sorter->append_block(block));
     }
+    if (eos) {
+        _sort_context->sorter->prepare_for_read();
+    }
+    return Status::OK();
 }
 } // namespace doris::pipeline

@@ -34,6 +34,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorTemplate* operator_template,
           _sink(sink),
           _current_channel_idx(0),
           _transfer_large_data_by_brpc(sink->_transfer_large_data_by_brpc) {}
+
 ExchangeSinkOperator::~ExchangeSinkOperator() = default;
 
 Status ExchangeSinkOperator::init(const ExecNode* exec_node, RuntimeState* state) {

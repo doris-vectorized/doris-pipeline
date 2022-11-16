@@ -68,14 +68,20 @@ public:
     // Do prepare some state of Operator
     virtual Status prepare(RuntimeState* state);
 
-    // Like ExecNode，when pipeline task first time be schduled， can't block
+    // Like ExecNode，when pipeline task first time be scheduled， can't block
     // the pipeline should be open after dependencies is finish
     // Eg a -> c, b-> c, after a, b pipeline finish, c pipeline should call open
     // Now the pipeline only have one task, so the there is no performance bottleneck for the mechanism，
     // but if one pipeline have multi task to parallel work, need to rethink the logic
+    //
+    // Each operator should call open_self() to prepare resource to do data compute.
+    // if ExecNode split to sink and source operator, open_self() should be called in sink operator
     virtual Status open(RuntimeState* state);
 
     // Release the resource, should not block the thread
+    //
+    // Each operator should call close_self() to release resource
+    // if ExecNode split to sink and source operator, close_self() should be called in source operator
     virtual Status close(RuntimeState* state);
 
     Status set_child(OperatorPtr child) {

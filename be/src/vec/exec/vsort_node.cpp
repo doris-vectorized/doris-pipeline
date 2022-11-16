@@ -68,10 +68,6 @@ Status VSortNode::init(const TPlanNode& tnode, RuntimeState* state) {
 Status VSortNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    return prepare_self(state);
-}
-
-Status VSortNode::prepare_self(RuntimeState* state) {
     _runtime_profile->add_info_string("TOP-N", _limit == -1 ? "false" : "true");
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     RETURN_IF_ERROR(_vsort_exec_exprs.prepare(state, child(0)->row_desc(), _row_descriptor));

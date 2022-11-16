@@ -90,14 +90,14 @@ public:
     // If overridden in subclass, must first call superclass's prepare().
     virtual Status prepare(RuntimeState* state);
 
-    Status prepare_self(RuntimeState*);
-
     // Performs any preparatory work prior to calling get_next().
     // Can be called repeatedly (after calls to close()).
     // Caller must not be holding any io buffers. This will cause deadlock.
     virtual Status open(RuntimeState* state);
 
-    Status open_self(RuntimeState* state);
+    // Only pipeline operator use exec node need to impl the virtual function
+    // so only vectorized exec node need to impl
+    virtual Status open_self(RuntimeState* state);
 
     // Retrieves rows and returns them via row_batch. Sets eos to true
     // if subsequent calls will not retrieve any more rows.
@@ -150,7 +150,9 @@ public:
     // each implementation should start out by calling the default implementation.
     virtual Status close(RuntimeState* state);
 
-    void close_self(RuntimeState* state);
+    // Only pipeline operator use exec node need to impl the virtual function
+    // so only vectorized exec node need to impl
+    virtual void close_self(RuntimeState* state);
 
     // Creates exec node tree from list of nodes contained in plan via depth-first
     // traversal. All nodes are placed in pool.
