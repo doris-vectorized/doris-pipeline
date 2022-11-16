@@ -57,19 +57,21 @@ void BlockedTaskScheduler::_schedule() {
     std::vector<PipelineTask*> ready_tasks;
 
     while (!_shutdown.load()) {
-        std::unique_lock<std::mutex> lock(this->_task_mutex);
-        local_blocked_tasks.splice(local_blocked_tasks.end(), _blocked_tasks);
-        if (local_blocked_tasks.empty()) {
-            while (!_shutdown.load() && _blocked_tasks.empty()) {
-                _task_cond.wait_for(lock, std::chrono::milliseconds(10));
-            }
-
-            if (_shutdown.load()) {
-                break;
-            }
-
-            // _blocked_tasks must no empty
+        {
+            std::unique_lock<std::mutex> lock(this->_task_mutex);
             local_blocked_tasks.splice(local_blocked_tasks.end(), _blocked_tasks);
+            if (local_blocked_tasks.empty()) {
+                while (!_shutdown.load() && _blocked_tasks.empty()) {
+                    _task_cond.wait_for(lock, std::chrono::milliseconds(10));
+                }
+
+                if (_shutdown.load()) {
+                    break;
+                }
+
+                DCHECK(!_blocked_tasks.empty());
+                local_blocked_tasks.splice(local_blocked_tasks.end(), _blocked_tasks);
+            }
         }
 
         auto iter = local_blocked_tasks.begin();
@@ -104,7 +106,7 @@ void BlockedTaskScheduler::_schedule() {
                     iter++;
                 }
             } else {
-                // TODO: DCHCEK the state
+                // TODO: DCHECK the state
                 _make_task_run(local_blocked_tasks, iter, ready_tasks);
             }
         }
