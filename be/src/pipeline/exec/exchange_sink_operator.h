@@ -29,7 +29,7 @@ class VPartitionInfo;
 namespace pipeline {
 class SinkBuffer;
 
-// Now VDataStreamRecvr::SenderQueue::add_block is stock, should not support the local exchange
+// Now local exchange is not supported since VDataStreamRecvr is considered as a pipeline broker.
 class ExchangeSinkOperator : public Operator {
 public:
     ExchangeSinkOperator(OperatorTemplate* operator_template, vectorized::VDataStreamSender* sink);
