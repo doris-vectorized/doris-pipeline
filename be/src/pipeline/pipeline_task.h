@@ -23,7 +23,6 @@
 
 namespace doris::pipeline {
 
-
 /**
  * PipelineTaskState indicates all possible states of a pipeline task.
  * A FSM is described as below:
