@@ -23,6 +23,30 @@
 
 namespace doris::pipeline {
 
+/**
+ * PipelineTaskState indicates all possible states of a pipeline task.
+ * A FSM is described as below:
+ *
+ *                 |-----------------------------------------------------|
+ *                 |---|                  transfer 2    transfer 3       |   transfer 4
+ *                     |-------> BLOCKED ------------|                   |---------------------------------------> CANCELED
+ *              |------|                             |                   | transfer 5           transfer 6|
+ * NOT_READY ---| transfer 0                         |-----> RUNNABLE ---|---------> PENDING_FINISH ------|
+ *              |                                    |          ^        |                      transfer 7|
+ *              |------------------------------------|          |--------|---------------------------------------> FINISHED
+ *                transfer 1                                   transfer 9          transfer 8
+ *
+ * transfer 0 (NOT_READY -> BLOCKED): this pipeline task has some incomplete dependencies
+ * transfer 1 (NOT_READY -> RUNNABLE): this pipeline task has no incomplete dependencies
+ * transfer 2 (BLOCKED -> RUNNABLE): runnable condition for this pipeline task is met (e.g. get a new block from rpc)
+ * transfer 3 (RUNNABLE -> BLOCKED): runnable condition for this pipeline task is not met (e.g. sink operator send a block by RPC and wait for a response)
+ * transfer 4 (RUNNABLE -> CANCELED): current fragment is cancelled
+ * transfer 5 (RUNNABLE -> PENDING_FINISH): this pipeline task completed but wait for releasing resources hold by itself
+ * transfer 6 (PENDING_FINISH -> CANCELED): current fragment is cancelled
+ * transfer 7 (PENDING_FINISH -> FINISHED): this pipeline task completed and resources hold by itself have been released already
+ * transfer 8 (RUNNABLE -> FINISHED): this pipeline task completed and no resource need to be released
+ * transfer 9 (RUNNABLE -> RUNNABLE): this pipeline task yields CPU and re-enters the runnable queue if it is runnable and has occupied CPU for a max time slice
+ */
 enum PipelineTaskState : uint8_t {
     NOT_READY = 0, // do not prepare
     BLOCKED = 1,   // have some dependencies not finished or some conditions not met
