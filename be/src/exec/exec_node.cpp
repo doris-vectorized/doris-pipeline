@@ -88,10 +88,6 @@ namespace doris {
 
 const std::string ExecNode::ROW_THROUGHPUT_COUNTER = "RowsReturnedRate";
 
-int ExecNode::get_node_id_from_profile(RuntimeProfile* p) {
-    return p->metadata();
-}
-
 ExecNode::RowBatchQueue::RowBatchQueue(int max_batches) : BlockingQueue<RowBatch*>(max_batches) {}
 
 ExecNode::RowBatchQueue::~RowBatchQueue() {
@@ -240,7 +236,7 @@ Status ExecNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExecNode::open(RuntimeState* state) {
+Status ExecNode::alloc_resource(doris::RuntimeState* state) {
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     if (_vconjunct_ctx_ptr) {
         RETURN_IF_ERROR((*_vconjunct_ctx_ptr)->open(state));
@@ -251,6 +247,10 @@ Status ExecNode::open(RuntimeState* state) {
     } else {
         return Status::OK();
     }
+}
+
+Status ExecNode::open(RuntimeState* state) {
+    return ExecNode::alloc_resource(state);
 }
 
 Status ExecNode::reset(RuntimeState* state) {
@@ -269,15 +269,34 @@ Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {
     return Status::OK();
 }
 
+void ExecNode::release_resource(doris::RuntimeState* state) {
+    if (!_is_resource_released) {
+        if (_rows_returned_counter != nullptr) {
+            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+        }
+
+        if (_vconjunct_ctx_ptr) {
+            (*_vconjunct_ctx_ptr)->close(state);
+        }
+        if (typeid(*this) != typeid(doris::vectorized::NewOlapScanNode)) {
+            Expr::close(_conjunct_ctxs, state);
+        }
+        vectorized::VExpr::close(_projections, state);
+
+        if (_buffer_pool_client.is_registered()) {
+            state->exec_env()->buffer_pool()->DeregisterClient(&_buffer_pool_client);
+        }
+
+        runtime_profile()->add_to_span();
+        _is_resource_released = true;
+    }
+}
+
 Status ExecNode::close(RuntimeState* state) {
     if (_is_closed) {
         return Status::OK();
     }
     _is_closed = true;
-
-    if (_rows_returned_counter != nullptr) {
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    }
 
     Status result;
     for (int i = 0; i < _children.size(); ++i) {
@@ -286,21 +305,7 @@ Status ExecNode::close(RuntimeState* state) {
             result = st;
         }
     }
-
-    if (_vconjunct_ctx_ptr) {
-        (*_vconjunct_ctx_ptr)->close(state);
-    }
-    if (typeid(*this) != typeid(doris::vectorized::NewOlapScanNode)) {
-        Expr::close(_conjunct_ctxs, state);
-    }
-    vectorized::VExpr::close(_projections, state);
-
-    if (_buffer_pool_client.is_registered()) {
-        state->exec_env()->buffer_pool()->DeregisterClient(&_buffer_pool_client);
-    }
-
-    runtime_profile()->add_to_span();
-
+    ExecNode::release_resource(state);
     return result;
 }
 

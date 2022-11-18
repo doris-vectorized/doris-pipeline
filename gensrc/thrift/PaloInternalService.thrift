@@ -179,6 +179,8 @@ struct TQueryOptions {
   51: optional bool enable_new_shuffle_hash_method
 
   52: optional i32 be_exec_version = 0
+
+  53: optional bool enable_pipeline_engine = false
 }
     
 

@@ -17,6 +17,9 @@
 
 #include "vec/exec/vexchange_node.h"
 
+#include "pipeline/exec/exchange_source_operator.h"
+#include "pipeline/pipeline.h"
+#include "pipeline/pipeline_fragment_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/thread_context.h"

@@ -38,12 +38,17 @@ class ExprContext;
 class MemTracker;
 class PartRangeKey;
 
+namespace pipeline {
+class ExchangeSinkOperator;
+}
+
 namespace vectorized {
 class VExprContext;
 class VPartitionInfo;
 
 class VDataStreamSender : public DataSink {
 public:
+    friend class pipeline::ExchangeSinkOperator;
     VDataStreamSender(ObjectPool* pool, int sender_id, const RowDescriptor& row_desc,
                       const TDataStreamSink& sink,
                       const std::vector<TPlanFragmentDestination>& destinations,
@@ -157,6 +162,7 @@ protected:
 
 class VDataStreamSender::Channel {
 public:
+    friend class pipeline::ExchangeSinkOperator;
     // Create channel to send data to particular ipaddress/port/query/node
     // combination. buffer_size is specified in bytes and a soft limit on
     // how much tuple data is getting accumulated before being sent; it only applies

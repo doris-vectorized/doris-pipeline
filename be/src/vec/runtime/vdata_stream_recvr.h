@@ -57,7 +57,7 @@ public:
                      RuntimeProfile* profile,
                      std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr);
 
-    ~VDataStreamRecvr();
+    virtual ~VDataStreamRecvr();
 
     Status create_merger(const std::vector<VExprContext*>& ordering_expr,
                          const std::vector<bool>& is_asc_order,
@@ -68,6 +68,10 @@ public:
                    ::google::protobuf::Closure** done);
 
     void add_block(Block* block, int sender_id, bool use_move);
+
+    bool has_data(size_t n);
+
+    bool ready_to_read();
 
     Status get_next(Block* block, bool* eos);
 
@@ -89,6 +93,7 @@ public:
 
 private:
     class SenderQueue;
+    class PipSenderQueue;
     friend struct ReceiveQueueSortCursorImpl;
 
     bool exceeds_limit(int batch_size) {
@@ -137,11 +142,13 @@ private:
     RuntimeProfile::Counter* _decompress_bytes;
 
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
+
+    bool _enable_pipeline;
 };
 
 class ThreadClosure : public google::protobuf::Closure {
 public:
-    void Run() { _cv.notify_one(); }
+    void Run() override { _cv.notify_one(); }
     void wait(std::unique_lock<std::mutex>& lock) { _cv.wait(lock); }
 
 private:
@@ -152,7 +159,9 @@ class VDataStreamRecvr::SenderQueue {
 public:
     SenderQueue(VDataStreamRecvr* parent_recvr, int num_senders, RuntimeProfile* profile);
 
-    ~SenderQueue();
+    virtual ~SenderQueue();
+
+    virtual bool should_wait();
 
     Status get_batch(Block** next_block);
 
@@ -169,16 +178,20 @@ public:
 
     Block* current_block() const { return _current_block.get(); }
 
-private:
+protected:
+    virtual void _update_block_queue_empty() {}
+
     VDataStreamRecvr* _recvr;
     std::mutex _lock;
-    bool _is_cancelled;
-    int _num_remaining_senders;
+    std::atomic_bool _is_cancelled;
+    std::atomic_int _num_remaining_senders;
     std::condition_variable _data_arrival_cv;
     std::condition_variable _data_removal_cv;
 
     using VecBlockQueue = std::list<std::pair<int, Block*>>;
     VecBlockQueue _block_queue;
+
+    std::atomic_bool _block_queue_empty = true;
 
     std::unique_ptr<Block> _current_block;
 
@@ -189,6 +202,17 @@ private:
     std::unordered_map<int, int64_t> _packet_seq_map;
     std::deque<std::pair<google::protobuf::Closure*, MonotonicStopWatch>> _pending_closures;
     std::unordered_map<std::thread::id, std::unique_ptr<ThreadClosure>> _local_closure;
+};
+
+class VDataStreamRecvr::PipSenderQueue : public SenderQueue {
+public:
+    PipSenderQueue(VDataStreamRecvr* parent_recvr, int num_senders, RuntimeProfile* profile)
+            : SenderQueue(parent_recvr, num_senders, profile) {}
+
+    bool should_wait() override {
+        return !_is_cancelled && _block_queue_empty && _num_remaining_senders > 0;
+    }
+    void _update_block_queue_empty() override { _block_queue_empty = _block_queue.empty(); }
 };
 } // namespace vectorized
 } // namespace doris
