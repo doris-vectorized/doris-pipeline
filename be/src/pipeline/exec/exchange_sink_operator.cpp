@@ -37,7 +37,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorTemplate* operator_template,
 
 ExchangeSinkOperator::~ExchangeSinkOperator() = default;
 
-Status ExchangeSinkOperator::init(const ExecNode* exec_node, RuntimeState* state) {
+Status ExchangeSinkOperator::init(ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
     _state = state;
     return Status::OK();

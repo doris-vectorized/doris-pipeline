@@ -25,7 +25,7 @@ namespace pipeline {
 FinalAggSourceOperator::FinalAggSourceOperator(OperatorTemplate* templ,
                                                vectorized::AggregationNode* node)
         : Operator(templ), _agg_node(node) {}
-Status FinalAggSourceOperator::init(const ExecNode* exec_node, RuntimeState* state) {
+Status FinalAggSourceOperator::init(ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
     return Status::OK();
 }
@@ -68,11 +68,11 @@ Status FinalAggSourceOperator::close(RuntimeState* state) {
 
 FinalAggSourceOperatorTemplate::FinalAggSourceOperatorTemplate(
         int32_t id, const std::string& name, vectorized::AggregationNode* exec_node)
-        : OperatorTemplate(id, name, dynamic_cast<ExecNode*>(exec_node)) {}
+        : OperatorTemplate(id, name, exec_node) {}
 
 OperatorPtr FinalAggSourceOperatorTemplate::build_operator() {
     return std::make_shared<FinalAggSourceOperator>(
-            this, dynamic_cast<vectorized::AggregationNode*>(_related_exec_node));
+            this, assert_cast<vectorized::AggregationNode*>(_related_exec_node));
 }
 
 } // namespace pipeline

@@ -342,16 +342,17 @@ Status PipelineFragmentContext::submit() {
 
 // construct sink operator
 Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
+    // TODO: Abstruct this code to simple the case when, do cast in Operator internal
     OperatorTemplatePtr sink_;
     switch (thrift_sink.type) {
     case TDataSinkType::DATA_STREAM_SINK: {
-        auto* exchange_sink = dynamic_cast<doris::vectorized::VDataStreamSender*>(_sink.get());
+        auto* exchange_sink = assert_cast<doris::vectorized::VDataStreamSender*>(_sink.get());
         sink_ = std::make_shared<ExchangeSinkOperatorTemplate>(
                 next_operator_template_id(), "ExchangeSinkOperator", nullptr, exchange_sink);
         break;
     }
     case TDataSinkType::RESULT_SINK: {
-        auto* result_sink = dynamic_cast<doris::vectorized::VResultSink*>(_sink.get());
+        auto* result_sink = assert_cast<doris::vectorized::VResultSink*>(_sink.get());
         sink_ = std::make_shared<ResultSinkOperatorTemplate>(
                 next_operator_template_id(), "ResultSinkOperator", nullptr, result_sink);
         break;

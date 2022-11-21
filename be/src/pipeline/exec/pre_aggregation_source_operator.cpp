@@ -71,12 +71,11 @@ Status PreAggSourceOperator::close(RuntimeState* state) {
 PreAggSourceOperatorTemplate::PreAggSourceOperatorTemplate(int32_t id, const std::string& name,
                                                            vectorized::AggregationNode* exec_node,
                                                            std::shared_ptr<AggContext> agg_context)
-        : OperatorTemplate(id, name, dynamic_cast<ExecNode*>(exec_node)),
-          _agg_context(std::move(agg_context)) {}
+        : OperatorTemplate(id, name, exec_node), _agg_context(std::move(agg_context)) {}
 
 OperatorPtr PreAggSourceOperatorTemplate::build_operator() {
     return std::make_shared<PreAggSourceOperator>(
-            this, dynamic_cast<vectorized::AggregationNode*>(_related_exec_node), _agg_context);
+            this, assert_cast<vectorized::AggregationNode*>(_related_exec_node), _agg_context);
 }
 
 } // namespace pipeline

@@ -26,7 +26,7 @@ AggSinkOperator::AggSinkOperator(AggSinkOperatorTemplate* operator_template,
                                  std::shared_ptr<AggContext> agg_context)
         : Operator(operator_template), _agg_node(agg_node), _agg_context(std::move(agg_context)) {}
 
-Status AggSinkOperator::init(const ExecNode* exec_node, RuntimeState* state) {
+Status AggSinkOperator::init(ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
     return Status::OK();
 }
@@ -124,7 +124,7 @@ Status AggSinkOperator::close(RuntimeState* state) {
 AggSinkOperatorTemplate::AggSinkOperatorTemplate(int32_t id, const std::string& name,
                                                  vectorized::AggregationNode* exec_node,
                                                  std::shared_ptr<AggContext> agg_context)
-        : OperatorTemplate(id, name, dynamic_cast<ExecNode*>(exec_node)),
+        : OperatorTemplate(id, name, exec_node),
           _agg_node(exec_node),
           _agg_context(std::move(agg_context)) {}
 

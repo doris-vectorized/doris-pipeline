@@ -29,7 +29,7 @@ namespace pipeline {
 class FinalAggSourceOperator : public Operator {
 public:
     FinalAggSourceOperator(OperatorTemplate*, vectorized::AggregationNode*);
-    Status init(const ExecNode* exec_node, RuntimeState* state = nullptr) override;
+    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     bool can_read() override;

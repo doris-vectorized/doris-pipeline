@@ -33,7 +33,7 @@ public:
     OlapScanOperator(OperatorTemplate* operator_template,
                      doris::vectorized::NewOlapScanNode* scan_node);
     Status prepare(RuntimeState* state) override;
-    Status init(const ExecNode*, RuntimeState*) override;
+    Status init(ExecNode* exec_node, RuntimeState* state) override;
     //    Status open(RuntimeState* state) override; // NewOlapScanNode::_build_key_ranges_and_filters
 };
 
