@@ -142,7 +142,7 @@ Status VResultFileSink::send(RuntimeState* state, RowBatch* batch) {
     return Status::NotSupported("Not Implemented VResultFileSink Node::get_next scalar");
 }
 
-Status VResultFileSink::send(RuntimeState* state, Block* block) {
+Status VResultFileSink::send(RuntimeState* state, Block* block, bool eos) {
     INIT_AND_SCOPE_SEND_SPAN(state->get_tracer(), _send_span, "VResultFileSink::send");
     RETURN_IF_ERROR(_writer->append_block(*block));
     return Status::OK();
@@ -174,7 +174,8 @@ Status VResultFileSink::close(RuntimeState* state, Status exec_status) {
                 state->fragment_instance_id());
     } else {
         if (final_status.ok()) {
-            RETURN_IF_ERROR(serialize_block(_output_block.get(), _cur_pb_block, _channels.size()));
+            RETURN_IF_ERROR(
+                    serialize_block(_output_block.get(), _cur_pb_block.get(), _channels.size()));
             for (auto channel : _channels) {
                 RETURN_IF_ERROR(channel->send_block(_cur_pb_block));
             }

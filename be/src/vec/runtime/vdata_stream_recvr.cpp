@@ -155,7 +155,7 @@ void VDataStreamRecvr::SenderQueue::add_block(Block* block, bool use_move) {
     // limit memory via DataStreamRecvr::exceeds_limit.
     STOP_CHECK_THREAD_MEM_TRACKER_LIMIT();
     std::unique_lock<std::mutex> l(_lock);
-    if (_is_cancelled) {
+    if (_is_cancelled || !block->rows()) {
         return;
     }
     Block* nblock = new Block(block->get_columns_with_type_and_name());
@@ -350,13 +350,13 @@ bool VDataStreamRecvr::has_data(size_t n) {
 }
 
 bool VDataStreamRecvr::ready_to_read() {
-    bool res = true;
     for (size_t i = 0; i < _sender_queues.size(); i++) {
-        res &= has_data(i);
-        if (!res) break;
+        if (!has_data(i)) {
+            return false;
+        }
     }
 
-    return res;
+    return true;
 }
 
 Status VDataStreamRecvr::get_next(Block* block, bool* eos) {

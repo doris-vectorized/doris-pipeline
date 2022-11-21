@@ -22,7 +22,6 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "runtime/runtime_state.h"
-#include "util/debug_util.h"
 #include "vec/core/block.h"
 
 namespace doris::pipeline {
