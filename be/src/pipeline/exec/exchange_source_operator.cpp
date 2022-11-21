@@ -27,10 +27,9 @@ namespace doris::pipeline {
 ExchangeSourceOperator::ExchangeSourceOperator(OperatorTemplate* operator_template)
         : Operator(operator_template) {}
 
-Status ExchangeSourceOperator::init(const ExecNode* exec_node, RuntimeState* state) {
+Status ExchangeSourceOperator::init(ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
-    _exchange_node =
-            dynamic_cast<doris::vectorized::VExchangeNode*>(const_cast<ExecNode*>(exec_node));
+    _exchange_node = assert_cast<doris::vectorized::VExchangeNode*>(exec_node);
     return Status::OK();
 }
 

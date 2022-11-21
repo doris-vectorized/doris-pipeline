@@ -35,7 +35,7 @@ class SortSourceOperator : public Operator {
 public:
     SortSourceOperator(SortSourceOperatorTemplate* operator_template,
                        vectorized::VSortNode* sort_node);
-    Status init(const ExecNode*, RuntimeState*) override;
+    Status init(ExecNode* exec_node, RuntimeState* state) override;
 
     Status open(RuntimeState* state) override;
 

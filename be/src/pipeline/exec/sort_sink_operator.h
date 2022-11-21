@@ -34,7 +34,7 @@ class SortSinkOperatorTemplate;
 class SortSinkOperator : public Operator {
 public:
     SortSinkOperator(SortSinkOperatorTemplate* operator_template, vectorized::VSortNode* sort_node);
-    Status init(const ExecNode*, RuntimeState*) override;
+    Status init(ExecNode* exec_node, RuntimeState* state) override;
 
     Status open(RuntimeState* state) override;
 

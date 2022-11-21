@@ -60,7 +60,7 @@ public:
     bool is_source() const;
 
     // Should be call after ExecNode is constructed
-    virtual Status init(const ExecNode* exec_node, RuntimeState* state = nullptr);
+    virtual Status init(ExecNode* exec_node, RuntimeState* state = nullptr);
 
     // Only result sink and data stream sink need to impl the virtual function
     virtual Status init(const TDataSink& tsink) { return Status::OK(); };

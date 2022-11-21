@@ -30,7 +30,7 @@ class ResultSinkOperator : public Operator {
 public:
     ResultSinkOperator(OperatorTemplate* operator_template, vectorized::VResultSink* sink);
 
-    Status init(const ExecNode* exec_node, RuntimeState* state = nullptr) override {
+    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override {
         RETURN_IF_ERROR(Operator::init(exec_node, state));
         return Status::OK();
     }

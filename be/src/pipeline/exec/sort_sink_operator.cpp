@@ -29,7 +29,7 @@ SortSinkOperator::SortSinkOperator(SortSinkOperatorTemplate* operator_template,
                                    vectorized::VSortNode* sort_node)
         : Operator(operator_template), _sort_node(sort_node) {}
 
-Status SortSinkOperator::init(const doris::ExecNode* node, doris::RuntimeState* state) {
+Status SortSinkOperator::init(doris::ExecNode* node, doris::RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(node, state));
     return Status::OK();
 }

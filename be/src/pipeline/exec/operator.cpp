@@ -33,7 +33,7 @@ bool Operator::is_source() const {
     return _operator_template->is_source();
 }
 
-Status Operator::init(const ExecNode* exec_node, RuntimeState* state) {
+Status Operator::init(ExecNode* exec_node, RuntimeState* state) {
     _runtime_profile.reset(new RuntimeProfile(_operator_template->get_name()));
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _rows_returned_rate = runtime_profile()->add_derived_counter(

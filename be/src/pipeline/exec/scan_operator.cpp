@@ -28,7 +28,7 @@ ScanOperator::ScanOperator(OperatorTemplate* operator_template,
                            doris::vectorized::VScanNode* scan_node)
         : Operator(operator_template), _scan_node(scan_node), _eos(false) {}
 
-Status ScanOperator::init(const ExecNode* exec_node, RuntimeState* state) {
+Status ScanOperator::init(ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
     //    RETURN_IF_ERROR(_scan_node->_init_profile()); // subclass should call _init_profile，eg: OlapScanOperator
     return Status::OK();

@@ -32,7 +32,7 @@ namespace doris::pipeline {
 class ScanOperator : public Operator {
 public:
     ScanOperator(OperatorTemplate* operator_template, doris::vectorized::VScanNode* scan_node);
-    Status init(const ExecNode*, RuntimeState*) override;
+    Status init(ExecNode* exec_node, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
 
     bool can_read() override; // for source

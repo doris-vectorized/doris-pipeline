@@ -34,7 +34,7 @@ class ExchangeSinkOperator : public Operator {
 public:
     ExchangeSinkOperator(OperatorTemplate* operator_template, vectorized::VDataStreamSender* sink);
     ~ExchangeSinkOperator();
-    Status init(const ExecNode* exec_node, RuntimeState* state = nullptr) override;
+    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status init(const TDataSink& tsink) override;
 
     Status prepare(RuntimeState* state) override;

@@ -34,7 +34,7 @@ public:
     AggSinkOperator(AggSinkOperatorTemplate* operator_template, vectorized::AggregationNode*,
                     std::shared_ptr<AggContext>);
 
-    Status init(const ExecNode*, RuntimeState* state = nullptr) override;
+    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState*) override;
     Status open(RuntimeState* state) override;
 
