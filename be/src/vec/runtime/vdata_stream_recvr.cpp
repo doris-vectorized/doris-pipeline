@@ -56,7 +56,10 @@ Status VDataStreamRecvr::SenderQueue::get_batch(Block** next_block) {
                 &_is_cancelled);
         _data_arrival_cv.wait(l);
     }
+    return _inner_get_batch(next_block);
+}
 
+Status VDataStreamRecvr::SenderQueue::_inner_get_batch(Block** next_block) {
     // _cur_batch must be replaced with the returned batch.
     _current_block.reset();
     *next_block = nullptr;

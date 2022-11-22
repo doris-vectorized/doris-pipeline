@@ -163,7 +163,7 @@ public:
 
     virtual bool should_wait();
 
-    Status get_batch(Block** next_block);
+    virtual Status get_batch(Block** next_block);
 
     void add_block(const PBlock& pblock, int be_number, int64_t packet_seq,
                    ::google::protobuf::Closure** done);
@@ -180,6 +180,7 @@ public:
 
 protected:
     virtual void _update_block_queue_empty() {}
+    Status _inner_get_batch(Block** next_block);
 
     VDataStreamRecvr* _recvr;
     std::mutex _lock;
@@ -213,6 +214,11 @@ public:
         return !_is_cancelled && _block_queue_empty && _num_remaining_senders > 0;
     }
     void _update_block_queue_empty() override { _block_queue_empty = _block_queue.empty(); }
+
+    Status get_batch(Block** next_block) override {
+        CHECK(!should_wait());
+        return _inner_get_batch(next_block);
+    }
 };
 } // namespace vectorized
 } // namespace doris
