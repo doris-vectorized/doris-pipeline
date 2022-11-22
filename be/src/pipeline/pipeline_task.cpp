@@ -100,6 +100,7 @@ Status PipelineTask::open() {
 }
 
 Status PipelineTask::execute(bool* eos) {
+    SCOPED_ATTACH_TASK(runtime_state());
     SCOPED_TIMER(_task_profile->total_time_counter());
     int64_t time_spent = 0;
     // The status must be runnable

@@ -28,6 +28,7 @@ PreAggSourceOperator::PreAggSourceOperator(OperatorBuilder* templ,
 
 // for poc
 Status PreAggSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
     _agg_node->increase_ref();
     return Status::OK();
 }
