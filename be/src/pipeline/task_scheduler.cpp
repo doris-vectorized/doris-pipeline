@@ -238,7 +238,8 @@ void TaskScheduler::_do_work(size_t index) {
             status = task->finalize();
             if (!status.ok()) {
                 // execute failed，cancel all fragment
-                fragment_ctx->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR, "finalize fail");
+                fragment_ctx->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR,
+                                     "finalize fail:" + status.to_string());
                 _try_close_task(task, CANCELED);
             } else {
                 task->finish_p_dependency();

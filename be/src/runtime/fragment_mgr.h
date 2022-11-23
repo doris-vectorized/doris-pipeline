@@ -80,12 +80,12 @@ public:
 
     Status start_query_execution(const PExecPlanFragmentStartRequest* request);
 
-    Status cancel(const TUniqueId& fragment_id) {
-        return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
+    void cancel(const TUniqueId& fragment_id) {
+        cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
     }
 
-    Status cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason,
-                  const std::string& msg = "");
+    void cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason,
+                const std::string& msg = "");
 
     void cancel_worker();
 
