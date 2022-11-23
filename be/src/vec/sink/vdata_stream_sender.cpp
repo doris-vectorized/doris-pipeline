@@ -100,7 +100,7 @@ Status VDataStreamSender::Channel::send_current_block(bool eos) {
         return send_local_block(eos);
     }
     auto block = _mutable_block->to_block();
-    RETURN_IF_ERROR(_parent->serialize_block(&block, _ch_cur_pb_block.get()));
+    RETURN_IF_ERROR(_parent->serialize_block(&block, _ch_cur_pb_block));
     block.clear_column_data();
     _mutable_block->set_muatable_columns(block.mutate_columns());
     RETURN_IF_ERROR(send_block(_ch_cur_pb_block, eos));
@@ -137,7 +137,7 @@ Status VDataStreamSender::Channel::send_local_block(Block* block) {
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::send_block(std::shared_ptr<PBlock> block, bool eos) {
+Status VDataStreamSender::Channel::send_block(PBlock* block, bool eos) {
     SCOPED_TIMER(_parent->_brpc_send_timer);
     if (_closure == nullptr) {
         _closure = new RefCountClosure<PTransmitDataResult>();
@@ -157,7 +157,7 @@ Status VDataStreamSender::Channel::send_block(std::shared_ptr<PBlock> block, boo
 
     _brpc_request.set_eos(eos);
     if (block != nullptr) {
-        _brpc_request.set_allocated_block(block.get());
+        _brpc_request.set_allocated_block(block);
     }
     _brpc_request.set_packet_seq(_packet_seq++);
 
@@ -267,7 +267,7 @@ Status VDataStreamSender::Channel::close(RuntimeState* state) {
 }
 
 void VDataStreamSender::Channel::ch_roll_pb_block() {
-    _ch_cur_pb_block = (_ch_cur_pb_block == _ch_pb_block1 ? _ch_pb_block2 : _ch_pb_block1);
+    _ch_cur_pb_block = (_ch_cur_pb_block == &_ch_pb_block1 ? &_ch_pb_block2 : &_ch_pb_block1);
 }
 
 VDataStreamSender::VDataStreamSender(RuntimeState* state, ObjectPool* pool, int sender_id,
@@ -293,10 +293,7 @@ VDataStreamSender::VDataStreamSender(RuntimeState* state, ObjectPool* pool, int 
            sink.output_partition.type == TPartitionType::RANDOM ||
            sink.output_partition.type == TPartitionType::RANGE_PARTITIONED ||
            sink.output_partition.type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED);
-
-    _pb_block1 = std::make_shared<PBlock>();
-    _pb_block2 = std::make_shared<PBlock>();
-    _cur_pb_block = _pb_block1;
+    _cur_pb_block = &_pb_block1;
 
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
 
@@ -345,9 +342,7 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, int sender_id, const RowD
           _bytes_sent_counter(nullptr),
           _local_bytes_send_counter(nullptr),
           _dest_node_id(0) {
-    _pb_block1 = std::make_shared<PBlock>();
-    _pb_block2 = std::make_shared<PBlock>();
-    _cur_pb_block = _pb_block1;
+    _cur_pb_block = &_pb_block1;
     _name = "VDataStreamSender";
 }
 
@@ -367,9 +362,7 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, const RowDescriptor& row_
           _bytes_sent_counter(nullptr),
           _local_bytes_send_counter(nullptr),
           _dest_node_id(0) {
-    _pb_block1 = std::make_shared<PBlock>();
-    _pb_block2 = std::make_shared<PBlock>();
-    _cur_pb_block = _pb_block1;
+    _cur_pb_block = &_pb_block1;
     _name = "VDataStreamSender";
 }
 
@@ -500,7 +493,7 @@ Status VDataStreamSender::send(RuntimeState* state, Block* block, bool eos) {
                 RETURN_IF_ERROR(channel->send_local_block(block));
             }
         } else {
-            RETURN_IF_ERROR(serialize_block(block, _cur_pb_block.get(), _channels.size()));
+            RETURN_IF_ERROR(serialize_block(block, _cur_pb_block, _channels.size()));
             for (auto channel : _channels) {
                 if (channel->is_local()) {
                     RETURN_IF_ERROR(channel->send_local_block(block));
@@ -518,7 +511,7 @@ Status VDataStreamSender::send(RuntimeState* state, Block* block, bool eos) {
         if (current_channel->is_local()) {
             RETURN_IF_ERROR(current_channel->send_local_block(block));
         } else {
-            RETURN_IF_ERROR(serialize_block(block, current_channel->ch_cur_pb_block().get()));
+            RETURN_IF_ERROR(serialize_block(block, current_channel->ch_cur_pb_block()));
             RETURN_IF_ERROR(current_channel->send_block(current_channel->ch_cur_pb_block(), eos));
             current_channel->ch_roll_pb_block();
         }
@@ -631,7 +624,7 @@ Status VDataStreamSender::serialize_block(Block* src, PBlock* dest, int num_rece
 }
 
 void VDataStreamSender::_roll_pb_block() {
-    _cur_pb_block = (_cur_pb_block == _pb_block1 ? _pb_block2 : _pb_block1);
+    _cur_pb_block = (_cur_pb_block == &_pb_block1 ? &_pb_block2 : &_pb_block1);
 }
 
 void VDataStreamSender::registe_channels(pipeline::SinkBuffer* buffer) {

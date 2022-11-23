@@ -123,9 +123,9 @@ protected:
 
     // serialized batches for broadcasting; we need two so we can write
     // one while the other one is still being sent
-    std::shared_ptr<PBlock> _pb_block1;
-    std::shared_ptr<PBlock> _pb_block2;
-    std::shared_ptr<PBlock> _cur_pb_block = nullptr;
+    PBlock _pb_block1;
+    PBlock _pb_block2;
+    PBlock* _cur_pb_block;
 
     // compute per-row partition values
     std::vector<VExprContext*> _partition_expr_ctxs;
@@ -192,9 +192,7 @@ public:
         if (_is_local) {
             VLOG_NOTICE << "will use local Exchange, dest_node_id is : " << _dest_node_id;
         }
-        _ch_pb_block1 = std::make_shared<PBlock>();
-        _ch_pb_block2 = std::make_shared<PBlock>();
-        _ch_cur_pb_block = _ch_pb_block1;
+        _ch_cur_pb_block = &_ch_pb_block1;
     }
 
     virtual ~Channel() {
@@ -219,7 +217,7 @@ public:
     // Returns the status of the most recently finished transmit_data
     // rpc (or OK if there wasn't one that hasn't been reported yet).
     // if batch is nullptr, send the eof packet
-    virtual Status send_block(std::shared_ptr<PBlock> block, bool eos = false);
+    virtual Status send_block(PBlock* block, bool eos = false);
 
     Status add_rows(Block* block, const std::vector<int>& row);
 
@@ -239,7 +237,7 @@ public:
 
     int64_t num_data_bytes_sent() const { return _num_data_bytes_sent; }
 
-    std::shared_ptr<PBlock> ch_cur_pb_block() { return _ch_cur_pb_block; }
+    PBlock* ch_cur_pb_block() { return _ch_cur_pb_block; }
 
     std::string get_fragment_instance_id_str() {
         UniqueId uid(_fragment_instance_id);
@@ -316,9 +314,9 @@ private:
     // one while the other one is still being sent.
     // Which is for same reason as `_cur_pb_block`, `_pb_block1` and `_pb_block2`
     // in VDataStreamSender.
-    std::shared_ptr<PBlock> _ch_cur_pb_block = nullptr;
-    std::shared_ptr<PBlock> _ch_pb_block1;
-    std::shared_ptr<PBlock> _ch_pb_block2;
+    PBlock* _ch_cur_pb_block = nullptr;
+    PBlock _ch_pb_block1;
+    PBlock _ch_pb_block2;
 
     bool _enable_local_exchange = true;
 };
@@ -355,7 +353,7 @@ public:
     // Returns the status of the most recently finished transmit_data
     // rpc (or OK if there wasn't one that hasn't been reported yet).
     // if batch is nullptr, send the eof packet
-    Status send_block(std::shared_ptr<PBlock> block, bool eos = false) override {
+    Status send_block(PBlock* block, bool eos = false) override {
         if (eos) {
             if (_eos_send) {
                 return Status::OK();
@@ -364,23 +362,24 @@ public:
             }
         }
         if (eos || block->column_metas_size()) {
-            _buffer->add_block(
-                    {_fragment_instance_id, false, _brpc_stub, std::move(block), false, eos});
+            _buffer->add_block({_fragment_instance_id, false, _brpc_stub,
+                                block ? std::make_unique<PBlock>(std::move(*block)) : nullptr,
+                                false, eos});
         }
         return Status::OK();
     }
 
     // send _mutable_block
     Status send_current_block(bool eos = false) override {
-        std::shared_ptr<PBlock> block_ptr;
+        PBlock* block_ptr = nullptr;
         if (_mutable_block) {
-            block_ptr.reset(new PBlock()); // TODO: need a pool of PBlock()
+            block_ptr = new PBlock(); // TODO: need a pool of PBlock()
             auto block = _mutable_block->to_block();
-            RETURN_IF_ERROR(_parent->serialize_block(&block, block_ptr.get()));
+            RETURN_IF_ERROR(_parent->serialize_block(&block, block_ptr));
             block.clear_column_data();
             _mutable_block->set_muatable_columns(block.mutate_columns());
         }
-        RETURN_IF_ERROR(send_block(std::move(block_ptr), eos));
+        RETURN_IF_ERROR(send_block(block_ptr, eos));
         return Status::OK();
     }
 
