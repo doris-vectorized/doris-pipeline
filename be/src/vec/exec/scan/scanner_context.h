@@ -129,8 +129,6 @@ public:
 
     VScanNode* parent() { return _parent; }
 
-    OpentelemetrySpan scan_span() { return _scan_span; }
-
     virtual bool empty_in_queue();
 
 public:
