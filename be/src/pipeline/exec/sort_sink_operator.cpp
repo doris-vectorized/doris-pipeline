@@ -21,11 +21,11 @@
 
 namespace doris::pipeline {
 
-SortSinkOperatorTemplate::SortSinkOperatorTemplate(int32_t id, const string& name,
-                                                   vectorized::VSortNode* sort_node)
-        : OperatorTemplate(id, name, sort_node), _sort_node(sort_node) {}
+SortSinkOperatorBuilder::SortSinkOperatorBuilder(int32_t id, const string& name,
+                                                 vectorized::VSortNode* sort_node)
+        : OperatorBuilder(id, name, sort_node), _sort_node(sort_node) {}
 
-SortSinkOperator::SortSinkOperator(SortSinkOperatorTemplate* operator_template,
+SortSinkOperator::SortSinkOperator(SortSinkOperatorBuilder* operator_template,
                                    vectorized::VSortNode* sort_node)
         : Operator(operator_template), _sort_node(sort_node) {}
 

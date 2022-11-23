@@ -24,7 +24,7 @@
 
 namespace doris::pipeline {
 
-ScanOperator::ScanOperator(OperatorTemplate* operator_template,
+ScanOperator::ScanOperator(OperatorBuilder* operator_template,
                            doris::vectorized::VScanNode* scan_node)
         : Operator(operator_template), _scan_node(scan_node), _eos(false) {}
 

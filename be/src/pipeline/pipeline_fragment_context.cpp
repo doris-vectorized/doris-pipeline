@@ -275,14 +275,14 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
     // for source
     case TPlanNodeType::OLAP_SCAN_NODE: {
         auto* new_olap_scan_node = assert_cast<vectorized::NewOlapScanNode*>(node);
-        OperatorTemplatePtr operator_t = std::make_shared<OlapScanOperatorTemplate>(
+        OperatorBuilderPtr operator_t = std::make_shared<OlapScanOperatorBuilder>(
                 fragment_context->next_operator_template_id(), "OlapScanOperator",
                 new_olap_scan_node);
         RETURN_IF_ERROR(cur_pipe->add_operator(operator_t));
         break;
     }
     case TPlanNodeType::EXCHANGE_NODE: {
-        OperatorTemplatePtr operator_t = std::make_shared<ExchangeSourceOperatorTemplate>(
+        OperatorBuilderPtr operator_t = std::make_shared<ExchangeSourceOperatorBuilder>(
                 next_operator_template_id(), "ExchangeSourceOperator", node);
         RETURN_IF_ERROR(cur_pipe->add_operator(operator_t));
         break;
@@ -292,15 +292,15 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         auto agg_ctx = std::make_shared<AggContext>();
         auto new_pipe = add_pipeline();
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipe));
-        OperatorTemplatePtr agg_sink = std::make_shared<AggSinkOperatorTemplate>(
+        OperatorBuilderPtr agg_sink = std::make_shared<AggSinkOperatorBuilder>(
                 next_operator_template_id(), "AggSinkOperator", agg_node, agg_ctx);
         RETURN_IF_ERROR(new_pipe->set_sink(agg_sink));
         if (agg_node->is_streaming_preagg()) {
-            OperatorTemplatePtr agg_source = std::make_shared<PreAggSourceOperatorTemplate>(
+            OperatorBuilderPtr agg_source = std::make_shared<PreAggSourceOperatorBuilder>(
                     next_operator_template_id(), "PAggSourceOperator", agg_node, agg_ctx);
             RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         } else {
-            OperatorTemplatePtr agg_source = std::make_shared<AggregationSourceOperatorTemplate>(
+            OperatorBuilderPtr agg_source = std::make_shared<AggregationSourceOperatorBuilder>(
                     next_operator_template_id(), "AggregationSourceOperator", agg_node);
             RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         }
@@ -311,12 +311,12 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         auto new_pipeline = add_pipeline();
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipeline));
 
-        OperatorTemplatePtr sort_sink = std::make_shared<SortSinkOperatorTemplate>(
-                next_operator_template_id(), "SortSinkOperatorTemplate", sort_node);
+        OperatorBuilderPtr sort_sink = std::make_shared<SortSinkOperatorBuilder>(
+                next_operator_template_id(), "SortSinkOperatorBuilder", sort_node);
         RETURN_IF_ERROR(new_pipeline->set_sink(sort_sink));
 
-        OperatorTemplatePtr sort_source = std::make_shared<SortSourceOperatorTemplate>(
-                next_operator_template_id(), "SortSourceOperatorTemplate", sort_node);
+        OperatorBuilderPtr sort_source = std::make_shared<SortSourceOperatorBuilder>(
+                next_operator_template_id(), "SortSourceOperatorBuilder", sort_node);
         RETURN_IF_ERROR(cur_pipe->add_operator(sort_source));
         break;
     }
@@ -342,17 +342,17 @@ Status PipelineFragmentContext::submit() {
 // construct sink operator
 Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
     // TODO: Abstruct this code to simple the case when, do cast in Operator internal
-    OperatorTemplatePtr sink_;
+    OperatorBuilderPtr sink_;
     switch (thrift_sink.type) {
     case TDataSinkType::DATA_STREAM_SINK: {
         auto* exchange_sink = assert_cast<doris::vectorized::VDataStreamSender*>(_sink.get());
-        sink_ = std::make_shared<ExchangeSinkOperatorTemplate>(
+        sink_ = std::make_shared<ExchangeSinkOperatorBuilder>(
                 next_operator_template_id(), "ExchangeSinkOperator", nullptr, exchange_sink);
         break;
     }
     case TDataSinkType::RESULT_SINK: {
         auto* result_sink = assert_cast<doris::vectorized::VResultSink*>(_sink.get());
-        sink_ = std::make_shared<ResultSinkOperatorTemplate>(
+        sink_ = std::make_shared<ResultSinkOperatorBuilder>(
                 next_operator_template_id(), "ResultSinkOperator", nullptr, result_sink);
         break;
     }

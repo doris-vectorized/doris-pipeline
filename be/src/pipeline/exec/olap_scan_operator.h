@@ -27,22 +27,22 @@ class NewOlapScanNode;
 
 namespace doris::pipeline {
 
-class OlapScanOperatorTemplate;
+class OlapScanOperatorBuilder;
 class OlapScanOperator : public ScanOperator {
 public:
-    OlapScanOperator(OperatorTemplate* operator_template,
+    OlapScanOperator(OperatorBuilder* operator_template,
                      doris::vectorized::NewOlapScanNode* scan_node);
     Status prepare(RuntimeState* state) override;
     Status init(ExecNode* exec_node, RuntimeState* state) override;
     //    Status open(RuntimeState* state) override; // NewOlapScanNode::_build_key_ranges_and_filters
 };
 
-class OlapScanOperatorTemplate : public ScanOperatorTemplate {
+class OlapScanOperatorBuilder : public ScanOperatorBuilder {
 public:
-    OlapScanOperatorTemplate(uint32_t id, const std::string& name,
-                             // TupleId o_tuple_id, int64_t limit_per_scanner,
-                             vectorized::NewOlapScanNode* new_olap_scan_node);
-    //            : ScanOperatorTemplate(id, name, dynamic_cast<ExecNode*>(new_olap_scan_node)),
+    OlapScanOperatorBuilder(uint32_t id, const std::string& name,
+                            // TupleId o_tuple_id, int64_t limit_per_scanner,
+                            vectorized::NewOlapScanNode* new_olap_scan_node);
+    //            : ScanOperatorBuilder(id, name, dynamic_cast<ExecNode*>(new_olap_scan_node)),
     //            _output_tuple_id(o_tuple_id), _limit_per_scanner(limit_per_scanner),
     //            _new_olap_scan_node(new_olap_scan_node) {}
 

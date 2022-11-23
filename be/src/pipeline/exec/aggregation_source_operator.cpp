@@ -22,7 +22,7 @@
 namespace doris {
 namespace pipeline {
 
-AggregationSourceOperator::AggregationSourceOperator(OperatorTemplate* templ,
+AggregationSourceOperator::AggregationSourceOperator(OperatorBuilder* templ,
                                                      vectorized::AggregationNode* node)
         : Operator(templ), _agg_node(node) {}
 
@@ -61,11 +61,11 @@ Status AggregationSourceOperator::close(RuntimeState* state) {
 
 ///////////////////////////////  operator template  ////////////////////////////////
 
-AggregationSourceOperatorTemplate::AggregationSourceOperatorTemplate(
+AggregationSourceOperatorBuilder::AggregationSourceOperatorBuilder(
         int32_t id, const std::string& name, vectorized::AggregationNode* exec_node)
-        : OperatorTemplate(id, name, exec_node) {}
+        : OperatorBuilder(id, name, exec_node) {}
 
-OperatorPtr AggregationSourceOperatorTemplate::build_operator() {
+OperatorPtr AggregationSourceOperatorBuilder::build_operator() {
     return std::make_shared<AggregationSourceOperator>(
             this, assert_cast<vectorized::AggregationNode*>(_related_exec_node));
 }

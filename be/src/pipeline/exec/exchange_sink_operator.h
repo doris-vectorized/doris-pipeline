@@ -28,7 +28,7 @@ class SinkBuffer;
 // Now local exchange is not supported since VDataStreamRecvr is considered as a pipeline broker.
 class ExchangeSinkOperator : public Operator {
 public:
-    ExchangeSinkOperator(OperatorTemplate* operator_template, vectorized::VDataStreamSender* sink);
+    ExchangeSinkOperator(OperatorBuilder* operator_template, vectorized::VDataStreamSender* sink);
     ~ExchangeSinkOperator() override;
     Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status init(const TDataSink& tsink) override;
@@ -50,11 +50,11 @@ private:
     RuntimeState* _state = nullptr;
 };
 
-class ExchangeSinkOperatorTemplate : public OperatorTemplate {
+class ExchangeSinkOperatorBuilder : public OperatorBuilder {
 public:
-    ExchangeSinkOperatorTemplate(int32_t id, const std::string& name, ExecNode* exec_node,
-                                 vectorized::VDataStreamSender* sink)
-            : OperatorTemplate(id, name, exec_node), _sink(sink) {}
+    ExchangeSinkOperatorBuilder(int32_t id, const std::string& name, ExecNode* exec_node,
+                                vectorized::VDataStreamSender* sink)
+            : OperatorBuilder(id, name, exec_node), _sink(sink) {}
 
     bool is_sink() const override { return true; }
 

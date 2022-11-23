@@ -27,7 +27,7 @@ namespace pipeline {
 
 class PreAggSourceOperator : public Operator {
 public:
-    PreAggSourceOperator(OperatorTemplate*, vectorized::AggregationNode*,
+    PreAggSourceOperator(OperatorBuilder*, vectorized::AggregationNode*,
                          std::shared_ptr<AggContext>);
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
@@ -40,10 +40,10 @@ private:
     std::shared_ptr<AggContext> _agg_context;
 };
 
-class PreAggSourceOperatorTemplate : public OperatorTemplate {
+class PreAggSourceOperatorBuilder : public OperatorBuilder {
 public:
-    PreAggSourceOperatorTemplate(int32_t, const std::string&, vectorized::AggregationNode*,
-                                 std::shared_ptr<AggContext>);
+    PreAggSourceOperatorBuilder(int32_t, const std::string&, vectorized::AggregationNode*,
+                                std::shared_ptr<AggContext>);
 
     bool is_source() const override { return true; }
 

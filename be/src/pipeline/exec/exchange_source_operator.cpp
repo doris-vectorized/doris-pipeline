@@ -24,7 +24,7 @@
 
 namespace doris::pipeline {
 
-ExchangeSourceOperator::ExchangeSourceOperator(OperatorTemplate* operator_template)
+ExchangeSourceOperator::ExchangeSourceOperator(OperatorBuilder* operator_template)
         : Operator(operator_template) {}
 
 Status ExchangeSourceOperator::init(ExecNode* exec_node, RuntimeState* state) {

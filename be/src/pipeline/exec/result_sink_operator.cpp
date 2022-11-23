@@ -21,7 +21,7 @@
 #include "vec/sink/vresult_sink.h"
 
 namespace doris::pipeline {
-ResultSinkOperator::ResultSinkOperator(OperatorTemplate* operator_template,
+ResultSinkOperator::ResultSinkOperator(OperatorBuilder* operator_template,
                                        vectorized::VResultSink* sink)
         : Operator(operator_template), _sink(sink) {}
 

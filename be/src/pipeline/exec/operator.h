@@ -41,7 +41,7 @@ enum class SinkState : uint8_t {
 };
 ////////////////       DO NOT USE THE UP State     ////////////////
 
-class OperatorTemplate;
+class OperatorBuilder;
 class Operator;
 
 using OperatorPtr = std::shared_ptr<Operator>;
@@ -49,7 +49,7 @@ using Operators = std::vector<OperatorPtr>;
 
 class Operator {
 public:
-    explicit Operator(OperatorTemplate* operator_template);
+    explicit Operator(OperatorBuilder* operator_template);
     virtual ~Operator() = default;
 
     // After both sink and source need to know the cancel state.
@@ -132,7 +132,7 @@ public:
     // and add block rows for profile
     void reached_limit(vectorized::Block* block, bool* eos);
 
-    const OperatorTemplate* operator_template() const { return _operator_template; }
+    const OperatorBuilder* operator_template() const { return _operator_template; }
 
     const RowDescriptor& row_desc();
 
@@ -144,7 +144,7 @@ public:
 protected:
     std::unique_ptr<MemTracker> _mem_tracker;
 
-    OperatorTemplate* _operator_template;
+    OperatorBuilder* _operator_template;
     // source has no child
     // if an operator is not source, it will get data from its child.
     OperatorPtr _child;
@@ -162,12 +162,12 @@ private:
     bool _is_closed = false;
 };
 
-class OperatorTemplate {
+class OperatorBuilder {
 public:
-    OperatorTemplate(int32_t id, const std::string& name, ExecNode* exec_node = nullptr)
+    OperatorBuilder(int32_t id, const std::string& name, ExecNode* exec_node = nullptr)
             : _id(id), _name(name), _related_exec_node(exec_node) {}
 
-    virtual ~OperatorTemplate() = default;
+    virtual ~OperatorBuilder() = default;
 
     virtual OperatorPtr build_operator() = 0;
 
@@ -200,7 +200,7 @@ protected:
     bool _is_closed = false;
 };
 
-using OperatorTemplatePtr = std::shared_ptr<OperatorTemplate>;
-using OperatorTemplates = std::vector<OperatorTemplatePtr>;
+using OperatorBuilderPtr = std::shared_ptr<OperatorBuilder>;
+using OperatorBuilders = std::vector<OperatorBuilderPtr>;
 
 } // namespace doris::pipeline

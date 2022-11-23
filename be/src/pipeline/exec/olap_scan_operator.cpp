@@ -21,7 +21,7 @@
 
 namespace doris::pipeline {
 
-OlapScanOperator::OlapScanOperator(OperatorTemplate* operator_template,
+OlapScanOperator::OlapScanOperator(OperatorBuilder* operator_template,
                                    doris::vectorized::NewOlapScanNode* scan_node)
         : ScanOperator(operator_template, scan_node) {}
 
@@ -36,10 +36,10 @@ Status OlapScanOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-OlapScanOperatorTemplate::OlapScanOperatorTemplate(uint32_t id, const std::string& name,
-                                                   // TupleId o_tuple_id, int64_t limit_per_scanner,
-                                                   vectorized::NewOlapScanNode* new_olap_scan_node)
-        : ScanOperatorTemplate(id, name, new_olap_scan_node),
+OlapScanOperatorBuilder::OlapScanOperatorBuilder(uint32_t id, const std::string& name,
+                                                 // TupleId o_tuple_id, int64_t limit_per_scanner,
+                                                 vectorized::NewOlapScanNode* new_olap_scan_node)
+        : ScanOperatorBuilder(id, name, new_olap_scan_node),
           _new_olap_scan_node(new_olap_scan_node) {}
 
 } // namespace doris::pipeline

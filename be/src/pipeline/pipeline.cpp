@@ -54,7 +54,7 @@ void Pipeline::close(RuntimeState* state) {
     _sink->close(state);
 }
 
-Status Pipeline::add_operator(OperatorTemplatePtr& op) {
+Status Pipeline::add_operator(OperatorBuilderPtr& op) {
     if (_operator_builders.empty() && !op->is_source()) {
         return Status::InternalError("Should set source before other operator");
     }
@@ -62,7 +62,7 @@ Status Pipeline::add_operator(OperatorTemplatePtr& op) {
     return Status::OK();
 }
 
-Status Pipeline::set_sink(OperatorTemplatePtr& sink_) {
+Status Pipeline::set_sink(OperatorBuilderPtr& sink_) {
     if (_sink) {
         return Status::InternalError("set sink twice");
     }
