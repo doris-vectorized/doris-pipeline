@@ -383,9 +383,6 @@ std::string PipelineFragmentContext::to_http_path(const std::string& file_name) 
 // TODO pipeline this callback should be placed in a thread pool
 void PipelineFragmentContext::send_report(bool done) {
     DCHECK(_closed_pipeline_cnt == _pipelines.size());
-    if (!_is_report_success) {
-        return;
-    }
 
     Status exec_status = Status::OK();
     {
@@ -393,6 +390,12 @@ void PipelineFragmentContext::send_report(bool done) {
         if (!_exec_status.ok()) {
             exec_status = _exec_status;
         }
+    }
+
+    // If plan is done successfully, but _is_report_success is false,
+    // no need to send report.
+    if (!_is_report_success && done && exec_status.ok()) {
+        return;
     }
 
     Status coord_status;
@@ -410,7 +413,7 @@ void PipelineFragmentContext::send_report(bool done) {
         }
         return;
     }
-    auto* profile = _runtime_state->runtime_profile();
+    auto* profile = _is_report_success ? _runtime_state->runtime_profile() : nullptr;
 
     TReportExecStatusParams params;
     params.protocol_version = FrontendServiceVersion::V1;

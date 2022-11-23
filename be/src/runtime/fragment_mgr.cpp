@@ -920,21 +920,32 @@ bool FragmentMgr::_is_scan_node(const TPlanNodeType::type& type) {
            type == TPlanNodeType::JDBC_SCAN_NODE;
 }
 
-Status FragmentMgr::cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason,
-                           const std::string& msg) {
+void FragmentMgr::cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason,
+                         const std::string& msg) {
     std::shared_ptr<FragmentExecState> exec_state;
     {
         std::lock_guard<std::mutex> lock(_lock);
         auto iter = _fragment_map.find(fragment_id);
-        if (iter == _fragment_map.end()) {
-            // No match
-            return Status::OK();
+        if (iter != _fragment_map.end()) {
+            exec_state = iter->second;
         }
-        exec_state = iter->second;
     }
-    exec_state->cancel(reason, msg);
+    if (exec_state) {
+        exec_state->cancel(reason, msg);
+        return;
+    }
 
-    return Status::OK();
+    std::shared_ptr<pipeline::PipelineFragmentContext> pipeline_fragment_ctx;
+    {
+        std::lock_guard<std::mutex> lock(_lock);
+        auto iter = _pipeline_map.find(fragment_id);
+        if (iter != _pipeline_map.end()) {
+            pipeline_fragment_ctx = iter->second;
+        }
+    }
+    if (pipeline_fragment_ctx) {
+        pipeline_fragment_ctx->cancel(reason, msg);
+    }
 }
 
 void FragmentMgr::cancel_worker() {
