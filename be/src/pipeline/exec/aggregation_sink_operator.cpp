@@ -56,12 +56,7 @@ bool AggSinkOperator::can_write() {
 Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, bool eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     if (!_agg_node->is_streaming_preagg()) {
-        if (!in_block || in_block->rows() == 0) {
-            return Status::OK();
-        }
-        RETURN_IF_ERROR(_agg_node->_executor.execute(in_block));
-        _num_rows_returned += in_block->rows();
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+        RETURN_IF_ERROR(_agg_node->sink(state, in_block, eos));
     } else {
         Status ret = Status::OK();
         if (in_block && in_block->rows() > 0) {
@@ -106,6 +101,7 @@ Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, b
             _agg_context->set_finish();
         }
     }
+    // TODO: remove it after we split the stream agg and normal agg
     _agg_node->_executor.update_memusage();
     return Status::OK();
 }

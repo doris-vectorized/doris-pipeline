@@ -36,7 +36,7 @@ class MemPool;
 
 namespace pipeline {
 class AggSinkOperator;
-class FinalAggSourceOperator;
+class AggregationSourceOperator;
 class PreAggSourceOperator;
 } // namespace pipeline
 
@@ -764,11 +764,13 @@ public:
     virtual Status get_next(RuntimeState* state, Block* block, bool* eos) override;
     virtual Status close(RuntimeState* state) override;
     virtual void release_resource(RuntimeState* state) override;
+    Status pull(doris::RuntimeState* state, vectorized::Block* output_block, bool* eos) override;
+    Status sink(doris::RuntimeState* state, vectorized::Block* input_block, bool eos) override;
     bool is_streaming_preagg() { return _is_streaming_preagg; }
 
 private:
     friend class pipeline::AggSinkOperator;
-    friend class pipeline::FinalAggSourceOperator;
+    friend class pipeline::AggregationSourceOperator;
     friend class pipeline::PreAggSourceOperator;
     // group by k1,k2
     std::vector<VExprContext*> _probe_expr_ctxs;

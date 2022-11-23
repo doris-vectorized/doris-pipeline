@@ -19,10 +19,10 @@
 
 #include "exec/agg_context.h"
 #include "exec/aggregation_sink_operator.h"
+#include "exec/aggregation_source_operator.h"
 #include "exec/data_sink.h"
 #include "exec/exchange_sink_operator.h"
 #include "exec/exchange_source_operator.h"
-#include "exec/final_aggregation_source_operator.h"
 #include "exec/olap_scan_operator.h"
 #include "exec/pre_aggregation_source_operator.h"
 #include "exec/result_sink_operator.h"
@@ -300,10 +300,8 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
                     next_operator_template_id(), "PAggSourceOperator", agg_node, agg_ctx);
             RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         } else {
-            // TODO: Use can read to replace dependency
-            cur_pipe->add_dependency(new_pipe);
-            OperatorTemplatePtr agg_source = std::make_shared<FinalAggSourceOperatorTemplate>(
-                    next_operator_template_id(), "FinalAggSourceOperator", agg_node);
+            OperatorTemplatePtr agg_source = std::make_shared<AggregationSourceOperatorTemplate>(
+                    next_operator_template_id(), "AggregationSourceOperator", agg_node);
             RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         }
         break;

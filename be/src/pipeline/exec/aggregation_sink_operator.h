@@ -40,17 +40,14 @@ public:
 
     Status sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
 
-    Status finalize(RuntimeState* state) override {
-        _is_finalized = true;
-        return Status::OK();
-    }
     bool can_write() override;
 
     Status close(RuntimeState* state) override;
 
+    Status finalize(doris::RuntimeState* state) override { return Status::OK(); }
+
 private:
     vectorized::AggregationNode* _agg_node;
-    bool _is_finalized;
     vectorized::Block _preagg_block = vectorized::Block();
 
     int64_t get_child_return_rows() { return _child->rows_returned(); }
