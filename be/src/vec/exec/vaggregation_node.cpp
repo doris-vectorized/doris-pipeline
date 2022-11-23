@@ -486,10 +486,7 @@ Status AggregationNode::open(RuntimeState* state) {
         release_block_memory(block);
         RETURN_IF_ERROR_AND_CHECK_SPAN(_children[0]->get_next_after_projects(state, &block, &eos),
                                        _children[0]->get_next_span(), eos);
-        if (block.rows() == 0) {
-            continue;
-        }
-        RETURN_IF_ERROR(_executor.execute(&block));
+        RETURN_IF_ERROR(sink(state, &block, eos));
         _executor.update_memusage();
     }
     _children[0]->close(state);
@@ -527,14 +524,27 @@ Status AggregationNode::get_next(RuntimeState* state, Block* block, bool* eos) {
         _make_nullable_output_key(block);
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     } else {
-        RETURN_IF_ERROR(_executor.get_result(state, block, eos));
-        _make_nullable_output_key(block);
-        // dispose the having clause, should not be execute in prestreaming agg
-        RETURN_IF_ERROR(VExprContext::filter_block(_vconjunct_ctx_ptr, block, block->columns()));
-        reached_limit(block, eos);
+        RETURN_IF_ERROR(pull(state, block, eos));
     }
-
     _executor.update_memusage();
+    return Status::OK();
+}
+
+Status AggregationNode::pull(doris::RuntimeState* state, vectorized::Block* block, bool* eos) {
+    RETURN_IF_ERROR(_executor.get_result(state, block, eos));
+    _make_nullable_output_key(block);
+    // dispose the having clause, should not be execute in prestreaming agg
+    RETURN_IF_ERROR(VExprContext::filter_block(_vconjunct_ctx_ptr, block, block->columns()));
+    reached_limit(block, eos);
+
+    return Status::OK();
+}
+
+Status AggregationNode::sink(doris::RuntimeState* state, vectorized::Block* in_block, bool eos) {
+    if (in_block->rows() > 0) {
+        RETURN_IF_ERROR(_executor.execute(in_block));
+    }
+    if (eos) _can_read = true;
     return Status::OK();
 }
 

@@ -34,7 +34,7 @@ set(PIPELINE_FILES
         exec/sink_buffer.cpp
         exec/result_sink_operator.cpp
         exec/aggregation_sink_operator.cpp
-        exec/final_aggregation_source_operator.cpp
+        exec/aggregation_source_operator.cpp
         exec/pre_aggregation_source_operator.cpp
         exec/agg_context.cpp
         exec/sort_source_operator.cpp
