@@ -28,7 +28,7 @@ namespace pipeline {
 
 class ResultSinkOperator : public Operator {
 public:
-    ResultSinkOperator(OperatorTemplate* operator_template, vectorized::VResultSink* sink);
+    ResultSinkOperator(OperatorBuilder* operator_template, vectorized::VResultSink* sink);
 
     Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override {
         RETURN_IF_ERROR(Operator::init(exec_node, state));
@@ -56,11 +56,11 @@ private:
     bool _finalized = false;
 };
 
-class ResultSinkOperatorTemplate : public OperatorTemplate {
+class ResultSinkOperatorBuilder : public OperatorBuilder {
 public:
-    ResultSinkOperatorTemplate(int32_t id, const std::string& name, ExecNode* exec_node,
-                               vectorized::VResultSink* sink)
-            : OperatorTemplate(id, name, exec_node), _sink(sink) {}
+    ResultSinkOperatorBuilder(int32_t id, const std::string& name, ExecNode* exec_node,
+                              vectorized::VResultSink* sink)
+            : OperatorBuilder(id, name, exec_node), _sink(sink) {}
 
     bool is_sink() const override { return true; }
 

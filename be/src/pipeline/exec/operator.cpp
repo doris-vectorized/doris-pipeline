@@ -19,7 +19,7 @@
 
 namespace doris::pipeline {
 
-Operator::Operator(OperatorTemplate* operator_template)
+Operator::Operator(OperatorBuilder* operator_template)
         : _operator_template(operator_template),
           _num_rows_returned(0),
           _limit(-1),
@@ -98,15 +98,15 @@ const RowDescriptor& Operator::row_desc() {
     return _operator_template->row_desc();
 }
 
-/////////////////////////////////////// OperatorTemplate ////////////////////////////////////////////////////////////
+/////////////////////////////////////// OperatorBuilder ////////////////////////////////////////////////////////////
 
-Status OperatorTemplate::prepare(doris::RuntimeState* state) {
+Status OperatorBuilder::prepare(doris::RuntimeState* state) {
     _state = state;
     // runtime filter, now dispose by NewOlapScanNode
     return Status::OK();
 }
 
-void OperatorTemplate::close(doris::RuntimeState* state) {
+void OperatorBuilder::close(doris::RuntimeState* state) {
     if (_is_closed) {
         return;
     }

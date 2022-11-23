@@ -31,7 +31,7 @@ namespace doris::pipeline {
 
 class ScanOperator : public Operator {
 public:
-    ScanOperator(OperatorTemplate* operator_template, doris::vectorized::VScanNode* scan_node);
+    ScanOperator(OperatorBuilder* operator_template, doris::vectorized::VScanNode* scan_node);
     Status init(ExecNode* exec_node, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
 
@@ -51,10 +51,10 @@ private:
     bool _eos;
 };
 
-class ScanOperatorTemplate : public OperatorTemplate {
+class ScanOperatorBuilder : public OperatorBuilder {
 public:
-    ScanOperatorTemplate(int32_t id, const std::string& name, ExecNode* exec_node)
-            : OperatorTemplate(id, name, exec_node) {}
+    ScanOperatorBuilder(int32_t id, const std::string& name, ExecNode* exec_node)
+            : OperatorBuilder(id, name, exec_node) {}
 
     bool is_source() const override { return true; }
 };

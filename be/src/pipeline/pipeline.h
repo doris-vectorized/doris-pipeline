@@ -62,11 +62,11 @@ public:
 
     bool has_dependency() { return _complete_dependency.load() < _dependencies.size(); }
 
-    Status add_operator(OperatorTemplatePtr& op);
+    Status add_operator(OperatorBuilderPtr& op);
 
-    Status set_sink(OperatorTemplatePtr& sink_operator);
+    Status set_sink(OperatorBuilderPtr& sink_operator);
 
-    OperatorTemplate* sink() { return _sink.get(); }
+    OperatorBuilder* sink() { return _sink.get(); }
 
     Status build_operators(Operators&);
 
@@ -75,8 +75,8 @@ public:
 private:
     std::atomic<uint32_t> _complete_dependency;
 
-    OperatorTemplates _operator_builders; // left is _source, right is _root
-    OperatorTemplatePtr _sink;            // put block to sink
+    OperatorBuilders _operator_builders; // left is _source, right is _root
+    OperatorBuilderPtr _sink;            // put block to sink
 
     std::vector<std::shared_ptr<Pipeline>> _parents;
     std::vector<std::shared_ptr<Pipeline>> _dependencies;

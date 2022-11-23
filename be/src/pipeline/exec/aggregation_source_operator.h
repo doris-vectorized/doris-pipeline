@@ -28,7 +28,7 @@ namespace pipeline {
 // For read none streaming agg sink operator's data
 class AggregationSourceOperator : public Operator {
 public:
-    AggregationSourceOperator(OperatorTemplate*, vectorized::AggregationNode*);
+    AggregationSourceOperator(OperatorBuilder*, vectorized::AggregationNode*);
     Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
@@ -40,9 +40,9 @@ private:
     vectorized::AggregationNode* _agg_node;
 };
 
-class AggregationSourceOperatorTemplate : public OperatorTemplate {
+class AggregationSourceOperatorBuilder : public OperatorBuilder {
 public:
-    AggregationSourceOperatorTemplate(int32_t, const std::string&, vectorized::AggregationNode*);
+    AggregationSourceOperatorBuilder(int32_t, const std::string&, vectorized::AggregationNode*);
 
     bool is_source() const override { return true; }
 

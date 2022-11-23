@@ -24,7 +24,7 @@
 
 namespace doris::pipeline {
 
-ExchangeSinkOperator::ExchangeSinkOperator(OperatorTemplate* operator_template,
+ExchangeSinkOperator::ExchangeSinkOperator(OperatorBuilder* operator_template,
                                            vectorized::VDataStreamSender* sink)
         : Operator(operator_template), _sink(sink) {}
 

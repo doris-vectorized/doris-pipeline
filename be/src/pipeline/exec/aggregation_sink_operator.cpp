@@ -21,7 +21,7 @@
 
 namespace doris::pipeline {
 
-AggSinkOperator::AggSinkOperator(AggSinkOperatorTemplate* operator_template,
+AggSinkOperator::AggSinkOperator(AggSinkOperatorBuilder* operator_template,
                                  vectorized::AggregationNode* agg_node,
                                  std::shared_ptr<AggContext> agg_context)
         : Operator(operator_template), _agg_node(agg_node), _agg_context(std::move(agg_context)) {}
@@ -117,23 +117,23 @@ Status AggSinkOperator::close(RuntimeState* state) {
 
 ///////////////////////////////  operator template  ////////////////////////////////
 
-AggSinkOperatorTemplate::AggSinkOperatorTemplate(int32_t id, const std::string& name,
-                                                 vectorized::AggregationNode* exec_node,
-                                                 std::shared_ptr<AggContext> agg_context)
-        : OperatorTemplate(id, name, exec_node),
+AggSinkOperatorBuilder::AggSinkOperatorBuilder(int32_t id, const std::string& name,
+                                               vectorized::AggregationNode* exec_node,
+                                               std::shared_ptr<AggContext> agg_context)
+        : OperatorBuilder(id, name, exec_node),
           _agg_node(exec_node),
           _agg_context(std::move(agg_context)) {}
 
-OperatorPtr AggSinkOperatorTemplate::build_operator() {
+OperatorPtr AggSinkOperatorBuilder::build_operator() {
     return std::make_shared<AggSinkOperator>(this, _agg_node, _agg_context);
 }
 
 // use final aggregation source operator
-bool AggSinkOperatorTemplate::is_sink() const {
+bool AggSinkOperatorBuilder::is_sink() const {
     return true;
 }
 
-bool AggSinkOperatorTemplate::is_source() const {
+bool AggSinkOperatorBuilder::is_source() const {
     return false;
 }
 } // namespace doris::pipeline

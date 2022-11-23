@@ -29,11 +29,11 @@ class VSortNode;
 
 namespace pipeline {
 
-class SortSinkOperatorTemplate;
+class SortSinkOperatorBuilder;
 
 class SortSinkOperator : public Operator {
 public:
-    SortSinkOperator(SortSinkOperatorTemplate* operator_template, vectorized::VSortNode* sort_node);
+    SortSinkOperator(SortSinkOperatorBuilder* operator_template, vectorized::VSortNode* sort_node);
     Status init(ExecNode* exec_node, RuntimeState* state) override;
 
     Status open(RuntimeState* state) override;
@@ -51,9 +51,9 @@ private:
     vectorized::VSortNode* _sort_node;
 };
 
-class SortSinkOperatorTemplate : public OperatorTemplate {
+class SortSinkOperatorBuilder : public OperatorBuilder {
 public:
-    SortSinkOperatorTemplate(int32_t id, const std::string& name, vectorized::VSortNode* sort_node);
+    SortSinkOperatorBuilder(int32_t id, const std::string& name, vectorized::VSortNode* sort_node);
 
     bool is_sink() const override { return true; }
 
