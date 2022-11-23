@@ -34,6 +34,7 @@
 #include "pipeline_task.h"
 #include "runtime/client_cache.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/runtime_state.h"
 #include "task_scheduler.h"
 #include "util/container_util.hpp"
 #include "util/thrift_util.h"
@@ -216,10 +217,10 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
 
     if (request.fragment.__isset.output_sink) {
-        RETURN_IF_ERROR(
-                DataSink::create_data_sink(_runtime_state->obj_pool(), request.fragment.output_sink,
-                                           request.fragment.output_exprs, params,
-                                           _root_plan->row_desc(), true, &_sink, *desc_tbl));
+        RETURN_IF_ERROR(DataSink::create_data_sink(
+                _runtime_state->obj_pool(), request.fragment.output_sink,
+                request.fragment.output_exprs, params, _root_plan->row_desc(), _runtime_state.get(),
+                &_sink, *desc_tbl));
     }
 
     _root_pipeline = fragment_context->add_pipeline();

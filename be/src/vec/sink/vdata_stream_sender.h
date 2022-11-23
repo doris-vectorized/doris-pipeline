@@ -17,11 +17,14 @@
 
 #pragma once
 
+#include <memory>
+
 #include "common/global_types.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/PaloInternalService_types.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "pipeline/exec/sink_buffer.h"
 #include "runtime/descriptors.h"
 #include "service/backend_options.h"
 #include "util/ref_count_closure.h"
@@ -49,8 +52,8 @@ class VPartitionInfo;
 class VDataStreamSender : public DataSink {
 public:
     friend class pipeline::ExchangeSinkOperator;
-    VDataStreamSender(ObjectPool* pool, int sender_id, const RowDescriptor& row_desc,
-                      const TDataStreamSink& sink,
+    VDataStreamSender(RuntimeState* state, ObjectPool* pool, int sender_id,
+                      const RowDescriptor& row_desc, const TDataStreamSink& sink,
                       const std::vector<TPlanFragmentDestination>& destinations,
                       int per_channel_buffer_size, bool send_query_statistics_with_every_batch);
 
@@ -69,7 +72,7 @@ public:
     Status open(RuntimeState* state) override;
 
     Status send(RuntimeState* state, RowBatch* batch) override;
-    Status send(RuntimeState* state, Block* block) override;
+    Status send(RuntimeState* state, Block* block, bool eos = false) override;
 
     Status close(RuntimeState* state, Status exec_status) override;
     RuntimeProfile* profile() override { return _profile; }
@@ -78,9 +81,12 @@ public:
 
     Status serialize_block(Block* src, PBlock* dest, int num_receivers = 1);
 
+    void registe_channels(pipeline::SinkBuffer* buffer);
+
 protected:
     void _roll_pb_block();
     class Channel;
+    class PipChannel;
 
     Status get_partition_column_result(Block* block, int* result) const {
         int counter = 0;
@@ -119,7 +125,7 @@ protected:
     // one while the other one is still being sent
     PBlock _pb_block1;
     PBlock _pb_block2;
-    PBlock* _cur_pb_block = nullptr;
+    PBlock* _cur_pb_block;
 
     // compute per-row partition values
     std::vector<VExprContext*> _partition_expr_ctxs;
@@ -158,11 +164,9 @@ protected:
     bool _new_shuffle_hash_method = false;
 };
 
-// TODO: support local exechange
-
 class VDataStreamSender::Channel {
 public:
-    friend class pipeline::ExchangeSinkOperator;
+    friend class VDataStreamSender;
     // Create channel to send data to particular ipaddress/port/query/node
     // combination. buffer_size is specified in bytes and a soft limit on
     // how much tuple data is getting accumulated before being sent; it only applies
@@ -181,14 +185,14 @@ public:
               _need_close(false),
               _brpc_dest_addr(brpc_dest),
               _is_transfer_chain(is_transfer_chain),
-              _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch),
-              _ch_cur_pb_block(&_ch_pb_block1) {
+              _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch) {
         std::string localhost = BackendOptions::get_localhost();
         _is_local = (_brpc_dest_addr.hostname == localhost) &&
                     (_brpc_dest_addr.port == config::brpc_port);
         if (_is_local) {
             VLOG_NOTICE << "will use local Exchange, dest_node_id is : " << _dest_node_id;
         }
+        _ch_cur_pb_block = &_ch_pb_block1;
     }
 
     virtual ~Channel() {
@@ -213,11 +217,11 @@ public:
     // Returns the status of the most recently finished transmit_data
     // rpc (or OK if there wasn't one that hasn't been reported yet).
     // if batch is nullptr, send the eof packet
-    Status send_block(PBlock* block, bool eos = false);
+    virtual Status send_block(PBlock* block, bool eos = false);
 
     Status add_rows(Block* block, const std::vector<int>& row);
 
-    Status send_current_block(bool eos = false);
+    virtual Status send_current_block(bool eos = false);
 
     Status send_local_block(bool eos = false);
 
@@ -267,7 +271,6 @@ private:
         return Status::OK();
     }
 
-private:
     // Serialize _batch into _thrift_batch and send via send_batch().
     // Returns send_batch() status.
     Status send_current_batch(bool eos = false);
@@ -336,6 +339,61 @@ Status VDataStreamSender::channel_add_rows(Channels& channels, int num_channels,
 
     return Status::OK();
 }
+
+class VDataStreamSender::PipChannel : public Channel {
+public:
+    PipChannel(VDataStreamSender* parent, const RowDescriptor& row_desc,
+               const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
+               PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
+               bool send_query_statistics_with_every_batch)
+            : Channel(parent, row_desc, brpc_dest, fragment_instance_id, dest_node_id, buffer_size,
+                      is_transfer_chain, send_query_statistics_with_every_batch) {}
+
+    // Asynchronously sends a block
+    // Returns the status of the most recently finished transmit_data
+    // rpc (or OK if there wasn't one that hasn't been reported yet).
+    // if batch is nullptr, send the eof packet
+    Status send_block(PBlock* block, bool eos = false) override {
+        if (eos) {
+            if (_eos_send) {
+                return Status::OK();
+            } else {
+                _eos_send = true;
+            }
+        }
+        if (eos || block->column_metas_size()) {
+            _buffer->add_block({_fragment_instance_id, false, _brpc_stub,
+                                block ? std::make_unique<PBlock>(std::move(*block)) : nullptr,
+                                false, eos});
+        }
+        return Status::OK();
+    }
+
+    // send _mutable_block
+    Status send_current_block(bool eos = false) override {
+        PBlock* block_ptr = nullptr;
+        if (_mutable_block) {
+            block_ptr = new PBlock(); // TODO: need a pool of PBlock()
+            auto block = _mutable_block->to_block();
+            RETURN_IF_ERROR(_parent->serialize_block(&block, block_ptr));
+            block.clear_column_data();
+            _mutable_block->set_muatable_columns(block.mutate_columns());
+        }
+        RETURN_IF_ERROR(send_block(block_ptr, eos));
+        return Status::OK();
+    }
+
+    void registe(pipeline::SinkBuffer* buffer) {
+        _buffer = buffer;
+        _buffer->register_sink(_fragment_instance_id);
+    }
+
+private:
+    friend class VDataStreamSender;
+
+    pipeline::SinkBuffer* _buffer = nullptr;
+    bool _eos_send = false;
+};
 
 } // namespace vectorized
 } // namespace doris

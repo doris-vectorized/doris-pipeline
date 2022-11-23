@@ -22,8 +22,6 @@
 #include <atomic>
 
 #include "service/brpc.h"
-#include "util/proto_util.h"
-#include "util/ref_count_closure.h"
 #include "util/time.h"
 
 namespace doris::pipeline {
@@ -152,7 +150,7 @@ void SinkBuffer::register_sink(TUniqueId fragment_instance_id) {
     _instance_to_sending_by_pipeline[low_id] = true;
 }
 
-void SinkBuffer::add_block(const TransmitInfo& request) {
+void SinkBuffer::add_block(TransmitInfo&& request) {
     if (_is_finishing) {
         return;
     }
@@ -165,7 +163,7 @@ void SinkBuffer::add_block(const TransmitInfo& request) {
             send_now = true;
             _instance_to_sending_by_pipeline[ins_id.lo] = false;
         }
-        _instance_to_package_queue[ins_id.lo].push(request);
+        _instance_to_package_queue[ins_id.lo].emplace(std::move(request));
     }
     if (send_now) {
         _send_rpc(ins_id.lo);
@@ -190,7 +188,7 @@ void SinkBuffer::_send_rpc(InstanceLoId id) {
     TransmitInfo& request = q.front();
     bool eos = request.eos;
     _instance_to_request[id]->set_eos(eos);
-    auto p_block = request.block;
+    auto& p_block = request.block;
     if (p_block) {
         _instance_to_request[id]->set_allocated_block(p_block.get());
     }

@@ -35,7 +35,7 @@ struct TransmitInfo {
     TUniqueId fragment_instance_id;
     bool is_http; // TODO
     std::shared_ptr<PBackendService_Stub> stub;
-    std::shared_ptr<PBlock> block;
+    std::unique_ptr<PBlock> block;
     bool is_transfer_chain;
     bool eos = false;
     // TODO _query_statistics
@@ -52,7 +52,7 @@ public:
     SinkBuffer(PUniqueId, int, PlanNodeId, RuntimeState*);
     ~SinkBuffer() = default;
     void register_sink(TUniqueId);
-    void add_block(const TransmitInfo& request);
+    void add_block(TransmitInfo&& request);
     bool is_full() const;
 
     void set_finishing();

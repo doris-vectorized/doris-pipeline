@@ -22,6 +22,7 @@
 
 #include <random>
 
+#include "common/status.h"
 #include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
 #include "runtime/memory/mem_tracker.h"
@@ -269,8 +270,8 @@ void VDataStreamSender::Channel::ch_roll_pb_block() {
     _ch_cur_pb_block = (_ch_cur_pb_block == &_ch_pb_block1 ? &_ch_pb_block2 : &_ch_pb_block1);
 }
 
-VDataStreamSender::VDataStreamSender(ObjectPool* pool, int sender_id, const RowDescriptor& row_desc,
-                                     const TDataStreamSink& sink,
+VDataStreamSender::VDataStreamSender(RuntimeState* state, ObjectPool* pool, int sender_id,
+                                     const RowDescriptor& row_desc, const TDataStreamSink& sink,
                                      const std::vector<TPlanFragmentDestination>& destinations,
                                      int per_channel_buffer_size,
                                      bool send_query_statistics_with_every_batch)
@@ -280,7 +281,6 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, int sender_id, const RowD
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
           _ignore_not_found(sink.__isset.ignore_not_found ? sink.ignore_not_found : true),
-          _cur_pb_block(&_pb_block1),
           _profile(nullptr),
           _serialize_batch_timer(nullptr),
           _bytes_sent_counter(nullptr),
@@ -293,7 +293,8 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, int sender_id, const RowD
            sink.output_partition.type == TPartitionType::RANDOM ||
            sink.output_partition.type == TPartitionType::RANGE_PARTITIONED ||
            sink.output_partition.type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED);
-    //
+    _cur_pb_block = &_pb_block1;
+
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
 
     for (int i = 0; i < destinations.size(); ++i) {
@@ -302,10 +303,17 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, int sender_id, const RowD
         const auto& fragment_instance_id = destinations[i].fragment_instance_id;
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) ==
             fragment_id_to_channel_index.end()) {
-            _channel_shared_ptrs.emplace_back(
-                    new Channel(this, row_desc, destinations[i].brpc_server, fragment_instance_id,
-                                sink.dest_node_id, per_channel_buffer_size, is_transfer_chain,
-                                send_query_statistics_with_every_batch));
+            if (state->enable_pipeline_exec()) {
+                _channel_shared_ptrs.emplace_back(new PipChannel(
+                        this, row_desc, destinations[i].brpc_server, fragment_instance_id,
+                        sink.dest_node_id, per_channel_buffer_size, is_transfer_chain,
+                        send_query_statistics_with_every_batch));
+            } else {
+                _channel_shared_ptrs.emplace_back(new Channel(
+                        this, row_desc, destinations[i].brpc_server, fragment_instance_id,
+                        sink.dest_node_id, per_channel_buffer_size, is_transfer_chain,
+                        send_query_statistics_with_every_batch));
+            }
             fragment_id_to_channel_index.emplace(fragment_instance_id.lo,
                                                  _channel_shared_ptrs.size() - 1);
             _channels.push_back(_channel_shared_ptrs.back().get());
@@ -326,7 +334,6 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, int sender_id, const RowD
           _row_desc(row_desc),
           _current_channel_idx(0),
           _ignore_not_found(true),
-          _cur_pb_block(&_pb_block1),
           _profile(nullptr),
           _serialize_batch_timer(nullptr),
           _compress_timer(nullptr),
@@ -335,6 +342,7 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, int sender_id, const RowD
           _bytes_sent_counter(nullptr),
           _local_bytes_send_counter(nullptr),
           _dest_node_id(0) {
+    _cur_pb_block = &_pb_block1;
     _name = "VDataStreamSender";
 }
 
@@ -346,7 +354,6 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, const RowDescriptor& row_
           _row_desc(row_desc),
           _current_channel_idx(0),
           _ignore_not_found(true),
-          _cur_pb_block(&_pb_block1),
           _profile(nullptr),
           _serialize_batch_timer(nullptr),
           _compress_timer(nullptr),
@@ -355,6 +362,7 @@ VDataStreamSender::VDataStreamSender(ObjectPool* pool, const RowDescriptor& row_
           _bytes_sent_counter(nullptr),
           _local_bytes_send_counter(nullptr),
           _dest_node_id(0) {
+    _cur_pb_block = &_pb_block1;
     _name = "VDataStreamSender";
 }
 
@@ -466,7 +474,7 @@ Status VDataStreamSender::send(RuntimeState* state, RowBatch* batch) {
     return Status::NotSupported("Not Implemented VOlapScanNode Node::get_next scalar");
 }
 
-Status VDataStreamSender::send(RuntimeState* state, Block* block) {
+Status VDataStreamSender::send(RuntimeState* state, Block* block, bool eos) {
     INIT_AND_SCOPE_SEND_SPAN(state->get_tracer(), _send_span, "VDataStreamSender::send")
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
@@ -490,7 +498,7 @@ Status VDataStreamSender::send(RuntimeState* state, Block* block) {
                 if (channel->is_local()) {
                     RETURN_IF_ERROR(channel->send_local_block(block));
                 } else {
-                    RETURN_IF_ERROR(channel->send_block(_cur_pb_block));
+                    RETURN_IF_ERROR(channel->send_block(_cur_pb_block, eos));
                 }
             }
             // rollover
@@ -504,7 +512,7 @@ Status VDataStreamSender::send(RuntimeState* state, Block* block) {
             RETURN_IF_ERROR(current_channel->send_local_block(block));
         } else {
             RETURN_IF_ERROR(serialize_block(block, current_channel->ch_cur_pb_block()));
-            RETURN_IF_ERROR(current_channel->send_block(current_channel->ch_cur_pb_block()));
+            RETURN_IF_ERROR(current_channel->send_block(current_channel->ch_cur_pb_block(), eos));
             current_channel->ch_roll_pb_block();
         }
         _current_channel_idx = (_current_channel_idx + 1) % _channels.size();
@@ -617,6 +625,12 @@ Status VDataStreamSender::serialize_block(Block* src, PBlock* dest, int num_rece
 
 void VDataStreamSender::_roll_pb_block() {
     _cur_pb_block = (_cur_pb_block == &_pb_block1 ? &_pb_block2 : &_pb_block1);
+}
+
+void VDataStreamSender::registe_channels(pipeline::SinkBuffer* buffer) {
+    for (auto channel : _channels) {
+        ((PipChannel*)channel)->registe(buffer);
+    }
 }
 
 } // namespace doris::vectorized
