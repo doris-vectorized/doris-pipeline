@@ -30,6 +30,8 @@
 #include "util/ref_count_closure.h"
 #include "util/uid_util.h"
 #include "vec/exprs/vexpr_context.h"
+#include "vec/runtime/vdata_stream_mgr.h"
+#include "vec/runtime/vdata_stream_recvr.h"
 
 namespace doris {
 class ObjectPool;
@@ -83,6 +85,8 @@ public:
     Status serialize_block(Block* src, PBlock* dest, int num_receivers = 1);
 
     void registe_channels(pipeline::SinkBuffer* buffer);
+
+    bool channel_all_can_write();
 
 protected:
     friend class Channel;
@@ -252,6 +256,16 @@ public:
     bool is_local() const { return _is_local; }
 
     void ch_roll_pb_block();
+
+    bool can_write() {
+        if (!_enable_local_exchange || !is_local()) {
+            return true;
+        }
+        std::shared_ptr<VDataStreamRecvr> recvr =
+                _parent->state()->exec_env()->vstream_mgr()->find_recvr(_fragment_instance_id,
+                                                                        _dest_node_id);
+        return recvr == nullptr || !recvr->exceeds_limit(0);
+    }
 
 protected:
     Status _wait_last_brpc() {

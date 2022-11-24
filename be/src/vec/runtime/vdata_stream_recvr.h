@@ -28,9 +28,9 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/query_fragments_ctx.h"
 #include "runtime/query_statistics.h"
 #include "util/runtime_profile.h"
+#include "vec/core/materialize_block.h"
 
 namespace google {
 namespace protobuf {
@@ -91,14 +91,14 @@ public:
 
     void close();
 
+    bool exceeds_limit(int batch_size) {
+        return _num_buffered_bytes + batch_size > _total_buffer_limit;
+    }
+
 private:
     class SenderQueue;
     class PipSenderQueue;
     friend struct ReceiveQueueSortCursorImpl;
-
-    bool exceeds_limit(int batch_size) {
-        return _num_buffered_bytes + batch_size > _total_buffer_limit;
-    }
 
     // DataStreamMgr instance used to create this recvr. (Not owned)
     VDataStreamMgr* _mgr;
@@ -168,7 +168,7 @@ public:
     void add_block(const PBlock& pblock, int be_number, int64_t packet_seq,
                    ::google::protobuf::Closure** done);
 
-    void add_block(Block* block, bool use_move);
+    virtual void add_block(Block* block, bool use_move);
 
     void decrement_senders(int sender_id);
 
@@ -218,6 +218,39 @@ public:
     Status get_batch(Block** next_block) override {
         CHECK(!should_wait());
         return _inner_get_batch(next_block);
+    }
+
+    void add_block(Block* block, bool use_move) override {
+        // Avoid deadlock when calling SenderQueue::cancel() in tcmalloc hook,
+        // limit memory via DataStreamRecvr::exceeds_limit.
+        STOP_CHECK_THREAD_MEM_TRACKER_LIMIT();
+
+        if (_is_cancelled || !block->rows()) {
+            return;
+        }
+        Block* nblock = new Block(block->get_columns_with_type_and_name());
+
+        // local exchange should copy the block contented if use move == false
+        if (use_move) {
+            block->clear();
+        } else {
+            auto rows = block->rows();
+            for (int i = 0; i < nblock->columns(); ++i) {
+                nblock->get_by_position(i).column =
+                        nblock->get_by_position(i).column->clone_resized(rows);
+            }
+        }
+        materialize_block_inplace(*nblock);
+
+        size_t block_size = nblock->bytes();
+        {
+            std::unique_lock<std::mutex> l(_lock);
+            _block_queue.emplace_back(block_size, nblock);
+        }
+        _update_block_queue_empty();
+        _data_arrival_cv.notify_one();
+
+        _recvr->_num_buffered_bytes += block_size;
     }
 };
 } // namespace vectorized

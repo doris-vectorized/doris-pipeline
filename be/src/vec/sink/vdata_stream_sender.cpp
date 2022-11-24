@@ -618,4 +618,13 @@ void VDataStreamSender::registe_channels(pipeline::SinkBuffer* buffer) {
     }
 }
 
+bool VDataStreamSender::channel_all_can_write() {
+    for (auto channel : _channels) {
+        if (!channel->can_write()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace doris::vectorized
