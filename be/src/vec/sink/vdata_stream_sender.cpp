@@ -37,7 +37,7 @@
 
 namespace doris::vectorized {
 
-Status VDataStreamSender::Channel::init(RuntimeState* state) {
+Status Channel::init(RuntimeState* state) {
     _be_number = state->be_number();
 
     _capacity = std::max(1, _buffer_size / std::max(_row_desc.get_row_size(), 1));
@@ -93,7 +93,7 @@ Status VDataStreamSender::Channel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::send_current_block(bool eos) {
+Status Channel::send_current_block(bool eos) {
     // FIXME: Now, local exchange will cause the performance problem is in a multi-threaded scenario
     // so this feature is turned off here by default. We need to re-examine this logic
     if (_enable_local_exchange && is_local()) {
@@ -108,7 +108,7 @@ Status VDataStreamSender::Channel::send_current_block(bool eos) {
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::send_local_block(bool eos) {
+Status Channel::send_local_block(bool eos) {
     std::shared_ptr<VDataStreamRecvr> recvr =
             _parent->state()->exec_env()->vstream_mgr()->find_recvr(_fragment_instance_id,
                                                                     _dest_node_id);
@@ -125,7 +125,7 @@ Status VDataStreamSender::Channel::send_local_block(bool eos) {
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::send_local_block(Block* block) {
+Status Channel::send_local_block(Block* block) {
     std::shared_ptr<VDataStreamRecvr> recvr =
             _parent->state()->exec_env()->vstream_mgr()->find_recvr(_fragment_instance_id,
                                                                     _dest_node_id);
@@ -137,7 +137,7 @@ Status VDataStreamSender::Channel::send_local_block(Block* block) {
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::send_block(PBlock* block, bool eos) {
+Status Channel::send_block(PBlock* block, bool eos) {
     SCOPED_TIMER(_parent->_brpc_send_timer);
     if (_closure == nullptr) {
         _closure = new RefCountClosure<PTransmitDataResult>();
@@ -164,37 +164,22 @@ Status VDataStreamSender::Channel::send_block(PBlock* block, bool eos) {
     _closure->ref();
     _closure->cntl.set_timeout_ms(_brpc_timeout_ms);
 
-    if (_parent->_transfer_large_data_by_brpc && _brpc_request.has_block() &&
-        _brpc_request.block().has_column_values() &&
-        _brpc_request.ByteSizeLong() > MIN_HTTP_BRPC_SIZE) {
+    {
         SCOPED_SWITCH_THREAD_MEM_TRACKER_LIMITER(ExecEnv::GetInstance()->orphan_mem_tracker());
-        Status st = request_embed_attachment_contain_block<PTransmitDataParams,
-                                                           RefCountClosure<PTransmitDataResult>>(
-                &_brpc_request, _closure);
-        RETURN_IF_ERROR(st);
-        std::string brpc_url =
-                fmt::format("http://{}:{}", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
-        std::shared_ptr<PBackendService_Stub> _brpc_http_stub =
-                _state->exec_env()->brpc_internal_client_cache()->get_new_client_no_cache(brpc_url,
-                                                                                          "http");
-        _closure->cntl.http_request().uri() =
-                brpc_url + "/PInternalServiceImpl/transmit_block_by_http";
-        _closure->cntl.http_request().set_method(brpc::HTTP_METHOD_POST);
-        _closure->cntl.http_request().set_content_type("application/json");
-        _brpc_http_stub->transmit_block_by_http(&_closure->cntl, nullptr, &_closure->result,
-                                                _closure);
-    } else {
-        SCOPED_SWITCH_THREAD_MEM_TRACKER_LIMITER(ExecEnv::GetInstance()->orphan_mem_tracker());
-        _closure->cntl.http_request().Clear();
-        _brpc_stub->transmit_block(&_closure->cntl, &_brpc_request, &_closure->result, _closure);
+        if (enable_http_send_block(_brpc_request, _parent->_transfer_large_data_by_brpc)) {
+            RETURN_IF_ERROR(transmit_block_http(_state, _closure, _brpc_request, _brpc_dest_addr));
+        } else {
+            transmit_block(*_brpc_stub, _closure, _brpc_request);
+        }
     }
+
     if (block != nullptr) {
         _brpc_request.release_block();
     }
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::add_rows(Block* block, const std::vector<int>& rows) {
+Status Channel::add_rows(Block* block, const std::vector<int>& rows) {
     if (_fragment_instance_id.lo == -1) {
         return Status::OK();
     }
@@ -229,7 +214,7 @@ Status VDataStreamSender::Channel::add_rows(Block* block, const std::vector<int>
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::close_wait(RuntimeState* state) {
+Status Channel::close_wait(RuntimeState* state) {
     if (_need_close) {
         Status st = _wait_last_brpc();
         if (!st.ok()) {
@@ -242,7 +227,7 @@ Status VDataStreamSender::Channel::close_wait(RuntimeState* state) {
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::close_internal() {
+Status Channel::close_internal() {
     if (!_need_close) {
         return Status::OK();
     }
@@ -258,7 +243,7 @@ Status VDataStreamSender::Channel::close_internal() {
     return Status::OK();
 }
 
-Status VDataStreamSender::Channel::close(RuntimeState* state) {
+Status Channel::close(RuntimeState* state) {
     Status st = close_internal();
     if (!st.ok()) {
         state->log_error(st.get_error_msg());
@@ -266,7 +251,7 @@ Status VDataStreamSender::Channel::close(RuntimeState* state) {
     return st;
 }
 
-void VDataStreamSender::Channel::ch_roll_pb_block() {
+void Channel::ch_roll_pb_block() {
     _ch_cur_pb_block = (_ch_cur_pb_block == &_ch_pb_block1 ? &_ch_pb_block2 : &_ch_pb_block1);
 }
 

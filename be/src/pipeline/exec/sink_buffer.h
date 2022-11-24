@@ -28,17 +28,16 @@
 #include "runtime/runtime_state.h"
 
 namespace doris {
+namespace vectorized {
+class PipChannel;
+}
 
 namespace pipeline {
 using InstanceLoId = int64_t;
 struct TransmitInfo {
-    TUniqueId fragment_instance_id;
-    bool is_http; // TODO
-    std::shared_ptr<PBackendService_Stub> stub;
+    vectorized::PipChannel* channel;
     std::unique_ptr<PBlock> block;
-    bool is_transfer_chain;
-    bool eos = false;
-    // TODO _query_statistics
+    bool eos;
 };
 
 struct ClosureContext {
@@ -52,7 +51,7 @@ public:
     SinkBuffer(PUniqueId, int, PlanNodeId, RuntimeState*);
     ~SinkBuffer() = default;
     void register_sink(TUniqueId);
-    void add_block(TransmitInfo&& request);
+    Status add_block(TransmitInfo&& request);
     bool is_full() const;
 
     void set_finishing();
@@ -61,8 +60,7 @@ public:
     void close();
 
 private:
-    // TODO: rethink here should use std::shared_ptr, seems useless
-    phmap::flat_hash_map<InstanceLoId, std::shared_ptr<std::mutex>>
+    phmap::flat_hash_map<InstanceLoId, std::unique_ptr<std::mutex>>
             _instance_to_package_queue_mutex;
     phmap::flat_hash_map<InstanceLoId, std::queue<TransmitInfo, std::list<TransmitInfo>>>
             _instance_to_package_queue;
@@ -88,9 +86,9 @@ private:
     RuntimeState* _state;
 
 private:
-    void _send_rpc(InstanceLoId);
+    Status _send_rpc(InstanceLoId);
     // must hold the _instance_to_package_queue_mutex[id] mutex to opera
-    void construct_request(InstanceLoId id) {
+    void _construct_request(InstanceLoId id) {
         _instance_to_request[id] = std::make_unique<PTransmitDataParams>();
         _instance_to_request[id]->set_allocated_finst_id(&_instance_to_finst_id[id]);
         _instance_to_request[id]->set_allocated_query_id(&_query_id);
@@ -99,6 +97,15 @@ private:
         _instance_to_request[id]->set_sender_id(_sender_id);
         _instance_to_request[id]->set_be_number(_be_number);
     }
+    void _ended(InstanceLoId id) {
+        std::unique_lock<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
+        _instance_to_sending_by_pipeline[id] = true;
+    }
+    void _faild(InstanceLoId id) {
+        _is_finishing = true;
+        _state->set_is_cancelled(true);
+        _ended(id);
+    };
 };
 
 } // namespace pipeline

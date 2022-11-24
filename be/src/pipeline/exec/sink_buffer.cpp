@@ -20,9 +20,13 @@
 #include <google/protobuf/stubs/common.h>
 
 #include <atomic>
+#include <memory>
 
+#include "common/status.h"
 #include "service/brpc.h"
+#include "util/proto_util.h"
 #include "util/time.h"
+#include "vec/sink/vdata_stream_sender.h"
 
 namespace doris::pipeline {
 // Disposable call back, it must be created on the heap.
@@ -123,7 +127,7 @@ void SinkBuffer::set_finishing() {
 
 bool SinkBuffer::is_pending_finish() const {
     for (auto& pair : _instance_to_package_queue_mutex) {
-        std::lock_guard<std::mutex> lock(*(pair.second));
+        std::unique_lock<std::mutex> lock(*(pair.second));
         auto& id = pair.first;
         if (!_instance_to_sending_by_pipeline.at(id)) {
             return true;
@@ -140,7 +144,7 @@ void SinkBuffer::register_sink(TUniqueId fragment_instance_id) {
     if (_instance_to_package_queue_mutex.count(low_id)) {
         return;
     }
-    _instance_to_package_queue_mutex[low_id] = std::make_shared<std::mutex>();
+    _instance_to_package_queue_mutex[low_id] = std::make_unique<std::mutex>();
     _instance_to_seq[low_id] = 0;
     _instance_to_package_queue[low_id] = std::queue<TransmitInfo, std::list<TransmitInfo>>();
     PUniqueId finst_id;
@@ -150,14 +154,14 @@ void SinkBuffer::register_sink(TUniqueId fragment_instance_id) {
     _instance_to_sending_by_pipeline[low_id] = true;
 }
 
-void SinkBuffer::add_block(TransmitInfo&& request) {
+Status SinkBuffer::add_block(TransmitInfo&& request) {
     if (_is_finishing) {
-        return;
+        return Status::OK();
     }
-    TUniqueId ins_id = request.fragment_instance_id;
+    TUniqueId ins_id = request.channel->_fragment_instance_id;
     bool send_now = false;
     {
-        std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[ins_id.lo]);
+        std::unique_lock<std::mutex> lock(*_instance_to_package_queue_mutex[ins_id.lo]);
         // Do not have in process rpc, directly send
         if (_instance_to_sending_by_pipeline[ins_id.lo]) {
             send_now = true;
@@ -166,102 +170,64 @@ void SinkBuffer::add_block(TransmitInfo&& request) {
         _instance_to_package_queue[ins_id.lo].emplace(std::move(request));
     }
     if (send_now) {
-        _send_rpc(ins_id.lo);
+        RETURN_IF_ERROR(_send_rpc(ins_id.lo));
     }
+
+    return Status::OK();
 }
 
-// 该方法执行时，某InstanceLoId对应的队列不会存在正在发送的数据
-// 要在执行链退出时，将_instance_to_sending_by_pipeline[ins_id.lo] 设置为true
-void SinkBuffer::_send_rpc(InstanceLoId id) {
-    std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
+Status SinkBuffer::_send_rpc(InstanceLoId id) {
+    std::unique_lock<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
+
     std::queue<TransmitInfo, std::list<TransmitInfo>>& q = _instance_to_package_queue[id];
     if (q.empty() || _is_finishing) {
-        // rpc 的链退出了，因此需要让pipeline线程执行_send_rpc方法
         _instance_to_sending_by_pipeline[id] = true;
-        return;
-    }
-    if (!_instance_to_request[id]) {
-        // 为啥这一句如果放在q.pop后，request里的block就变成nullptr了？
-        construct_request(id);
+        return Status::OK();
     }
 
     TransmitInfo& request = q.front();
-    bool eos = request.eos;
-    _instance_to_request[id]->set_eos(eos);
-    auto& p_block = request.block;
-    if (p_block) {
-        _instance_to_request[id]->set_allocated_block(p_block.get());
+
+    if (!_instance_to_request[id]) {
+        _construct_request(id);
     }
-    _instance_to_request[id]->set_packet_seq(_instance_to_seq[id]++);
-    auto* _closure = new DisposableClosure<PTransmitDataResult, ClosureContext>({id, eos});
-    // 不能直接传入capture this?
-    _closure->addFailedHandler([this](const ClosureContext& ctx) {
-        _is_finishing = true;
-        _state->set_is_cancelled(true);
-        {
-            std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[ctx.id]);
-            _instance_to_sending_by_pipeline[ctx.id] = true;
+
+    auto& brpc_request = _instance_to_request[id];
+    brpc_request->set_eos(request.eos);
+    brpc_request->set_packet_seq(_instance_to_seq[id]++);
+    if (request.block) {
+        brpc_request->set_allocated_block(request.block.get());
+    }
+
+    auto* _closure = new DisposableClosure<PTransmitDataResult, ClosureContext>({id, request.eos});
+    _closure->cntl.set_timeout_ms(request.channel->_brpc_timeout_ms);
+    _closure->addFailedHandler([&](const ClosureContext& ctx) { _faild(ctx.id); });
+    _closure->addSuccessHandler([&](const ClosureContext& ctx, const PTransmitDataResult& result) {
+        Status s = Status(result.status());
+        if (!s.ok()) {
+            _faild(ctx.id);
+        } else if (ctx.eos) {
+            _ended(ctx.id);
+        } else {
+            _send_rpc(ctx.id);
         }
     });
-    _closure->addSuccessHandler(
-            [this](const ClosureContext& ctx, const PTransmitDataResult& result) {
-                Status s = Status(result.status());
-                if (!s.ok()) {
-                    _is_finishing = true;
-                    _state->set_is_cancelled(true); // cancel pipeline context
-                    {
-                        std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[ctx.id]);
-                        _instance_to_sending_by_pipeline[ctx.id] = true;
-                    }
-                } else {
-                    if (ctx.eos) {
-                        std::lock_guard<std::mutex> lock(*_instance_to_package_queue_mutex[ctx.id]);
-                        _instance_to_sending_by_pipeline[ctx.id] = true;
-                    } else {
-                        _send_rpc(ctx.id);
-                    }
-                }
-            });
 
-    //    if (request.is_transfer_chain && eos) {
-    //        auto statistic = params->mutable_query_statistics();
-    //        _parent->_query_statistics->to_pb(statistic);
-    //    }
-
-    _closure->cntl.set_timeout_ms(10000); // 10s
-
-    if (false) {
-        //TODO Support HTTP interface
-        //    && _parent->_transfer_large_data_by_brpc
-        //        _brpc_request.has_block() &&
-        //        _brpc_request.block().has_column_values() &&
-        //        _brpc_request.ByteSizeLong() > MIN_HTTP_BRPC_SIZE) {
-        //        Status st = request_embed_attachment_contain_block<PTransmitDataParams,
-        //        RefCountClosure<PTransmitDataResult>>(
-        //                &_brpc_request, _closure);
-        //        if (!st.ok()) {
-        //            _is_finishing = true;
-        //        }
-        //        std::string brpc_url =
-        //                fmt::format("http://{}:{}", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
-        //        std::shared_ptr<PBackendService_Stub> _brpc_http_stub =
-        //                _state->exec_env()->brpc_internal_client_cache()->get_new_client_no_cache(brpc_url,
-        //                                                                                          "http");
-        //        _closure->cntl.http_request().uri() =
-        //                brpc_url + "/PInternalServiceImpl/transmit_block_by_http";
-        //        _closure->cntl.http_request().set_method(brpc::HTTP_METHOD_POST);
-        //        _closure->cntl.http_request().set_content_type("application/json");
-        //        _brpc_http_stub->transmit_block_by_http(&_closure->cntl, NULL, &_closure->result, _closure);
-    } else {
-        _closure->cntl.http_request().Clear();
-        request.stub->transmit_block(&_closure->cntl, _instance_to_request[id].get(),
-                                     &_closure->result, _closure);
-    }
-    if (p_block) {
-        _instance_to_request[id]->release_block();
+    {
+        SCOPED_SWITCH_THREAD_MEM_TRACKER_LIMITER(ExecEnv::GetInstance()->orphan_mem_tracker());
+        if (enable_http_send_block(*brpc_request)) {
+            RETURN_IF_ERROR(transmit_block_http(_state, _closure, *brpc_request,
+                                                request.channel->_brpc_dest_addr));
+        } else {
+            transmit_block(*request.channel->_brpc_stub, _closure, *brpc_request);
+        }
     }
 
+    if (request.block) {
+        brpc_request->release_block();
+    }
     q.pop();
+
+    return Status::OK();
 }
 
 } // namespace doris::pipeline

@@ -48,6 +48,7 @@ class ExchangeSinkOperator;
 namespace vectorized {
 class VExprContext;
 class VPartitionInfo;
+class Channel;
 
 class VDataStreamSender : public DataSink {
 public:
@@ -84,9 +85,10 @@ public:
     void registe_channels(pipeline::SinkBuffer* buffer);
 
 protected:
+    friend class Channel;
+    friend class pipeline::SinkBuffer;
+
     void _roll_pb_block();
-    class Channel;
-    class PipChannel;
 
     Status get_partition_column_result(Block* block, int* result) const {
         int counter = 0;
@@ -164,9 +166,10 @@ protected:
     bool _new_shuffle_hash_method = false;
 };
 
-class VDataStreamSender::Channel {
+class Channel {
 public:
     friend class VDataStreamSender;
+    friend class pipeline::SinkBuffer;
     // Create channel to send data to particular ipaddress/port/query/node
     // combination. buffer_size is specified in bytes and a soft limit on
     // how much tuple data is getting accumulated before being sent; it only applies
@@ -250,7 +253,7 @@ public:
 
     void ch_roll_pb_block();
 
-private:
+protected:
     Status _wait_last_brpc() {
         SCOPED_TIMER(_parent->_brpc_wait_timer);
         if (_closure == nullptr) {
@@ -340,7 +343,7 @@ Status VDataStreamSender::channel_add_rows(Channels& channels, int num_channels,
     return Status::OK();
 }
 
-class VDataStreamSender::PipChannel : public Channel {
+class PipChannel : public Channel {
 public:
     PipChannel(VDataStreamSender* parent, const RowDescriptor& row_desc,
                const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
@@ -362,15 +365,18 @@ public:
             }
         }
         if (eos || block->column_metas_size()) {
-            _buffer->add_block({_fragment_instance_id, false, _brpc_stub,
-                                block ? std::make_unique<PBlock>(std::move(*block)) : nullptr,
-                                false, eos});
+            RETURN_IF_ERROR(_buffer->add_block(
+                    {this, block ? std::make_unique<PBlock>(std::move(*block)) : nullptr, eos}));
         }
         return Status::OK();
     }
 
     // send _mutable_block
     Status send_current_block(bool eos = false) override {
+        if (_enable_local_exchange && is_local()) {
+            return send_local_block(eos);
+        }
+
         PBlock* block_ptr = nullptr;
         if (_mutable_block) {
             block_ptr = new PBlock(); // TODO: need a pool of PBlock()
