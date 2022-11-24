@@ -54,14 +54,16 @@ Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block*
     return st;
 }
 
+bool ExchangeSourceOperator::is_pending_finish() {
+    // TODO HappenLee
+    return false;
+}
+
 Status ExchangeSourceOperator::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-
-    if (_exchange_node && _exchange_node->_stream_recvr) {
-        _exchange_node->_stream_recvr->close();
-    }
+    _exchange_node->release_resource(state);
 
     return Operator::close(state);
 }

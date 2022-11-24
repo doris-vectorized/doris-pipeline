@@ -35,6 +35,7 @@ Status PreAggSourceOperator::prepare(RuntimeState* state) {
 
 // for poc
 Status PreAggSourceOperator::open(RuntimeState* state) {
+    _agg_node->increase_ref();
     return Status::OK();
 }
 
@@ -65,7 +66,9 @@ Status PreAggSourceOperator::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-    _agg_node->release_resource(state);
+    if (!_agg_node->decrease_ref()) {
+        _agg_node->release_resource(state);
+    }
     return Operator::close(state);
 }
 

@@ -166,6 +166,9 @@ public:
     // each implementation should start out by calling the default implementation.
     virtual Status close(RuntimeState* state);
 
+    void increase_ref() { ++_ref; }
+    int decrease_ref() { return --_ref; }
+
     // Release and close resource for the node
     // Only pipeline operator use exec node need to impl the virtual function
     // so only vectorized exec node need to impl
@@ -404,6 +407,7 @@ private:
     friend class pipeline::Operator;
     bool _is_closed;
     bool _is_resource_released = false;
+    std::atomic_int _ref; // used by pipeline operator to release resource.
 };
 
 } // namespace doris

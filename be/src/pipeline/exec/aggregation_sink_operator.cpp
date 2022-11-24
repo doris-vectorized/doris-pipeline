@@ -33,6 +33,7 @@ Status AggSinkOperator::init(ExecNode* exec_node, RuntimeState* state) {
 
 Status AggSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _agg_node->increase_ref();
     _agg_node->_child_return_rows =
             std::bind<int64_t>(&AggSinkOperator::get_child_return_rows, this);
     return Status::OK();
@@ -111,6 +112,9 @@ Status AggSinkOperator::close(RuntimeState* state) {
     if (_agg_context && !_agg_context->is_finish()) {
         // finish should be set, if not set here means error.
         _agg_context->set_canceled();
+    }
+    if (!_agg_node->decrease_ref()) {
+        _agg_node->release_resource(state);
     }
     return Status::OK();
 }

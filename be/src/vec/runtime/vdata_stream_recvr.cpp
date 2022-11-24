@@ -39,6 +39,7 @@ VDataStreamRecvr::SenderQueue::SenderQueue(VDataStreamRecvr* parent_recvr, int n
 VDataStreamRecvr::SenderQueue::~SenderQueue() = default;
 
 bool VDataStreamRecvr::SenderQueue::should_wait() {
+    DCHECK(false) << "VDataStreamRecvr::SenderQueue::should_wait execute";
     std::unique_lock<std::mutex> l(_lock);
     return !_is_cancelled && _block_queue.empty() && _num_remaining_senders > 0;
 }
@@ -348,17 +349,12 @@ void VDataStreamRecvr::add_block(Block* block, int sender_id, bool use_move) {
     _sender_queues[use_sender_id]->add_block(block, use_move);
 }
 
-bool VDataStreamRecvr::has_data(size_t n) {
-    return !_sender_queues[n]->should_wait();
-}
-
 bool VDataStreamRecvr::ready_to_read() {
     for (size_t i = 0; i < _sender_queues.size(); i++) {
-        if (!has_data(i)) {
+        if (_sender_queues[i]->should_wait()) {
             return false;
         }
     }
-
     return true;
 }
 

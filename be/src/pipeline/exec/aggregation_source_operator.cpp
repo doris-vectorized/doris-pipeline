@@ -33,8 +33,7 @@ Status AggregationSourceOperator::init(ExecNode* exec_node, RuntimeState* state)
 
 // for poc
 Status AggregationSourceOperator::prepare(RuntimeState* state) {
-    _mem_tracker = std::make_unique<MemTracker>(
-            "AggregationSourceOperator:" + _runtime_profile->name(), _runtime_profile.get());
+    _agg_node->increase_ref();
     return Status::OK();
 }
 
@@ -55,7 +54,9 @@ Status AggregationSourceOperator::get_block(RuntimeState* state, vectorized::Blo
 }
 
 Status AggregationSourceOperator::close(RuntimeState* state) {
-    _agg_node->release_resource(state);
+    if (!_agg_node->decrease_ref()) {
+        _agg_node->release_resource(state);
+    }
     return Status::OK();
 }
 

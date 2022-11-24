@@ -69,8 +69,6 @@ public:
 
     void add_block(Block* block, int sender_id, bool use_move);
 
-    bool has_data(size_t n);
-
     bool ready_to_read();
 
     Status get_next(Block* block, bool* eos);
@@ -213,10 +211,12 @@ public:
     bool should_wait() override {
         return !_is_cancelled && _block_queue_empty && _num_remaining_senders > 0;
     }
+
     void _update_block_queue_empty() override { _block_queue_empty = _block_queue.empty(); }
 
     Status get_batch(Block** next_block) override {
         CHECK(!should_wait());
+        std::lock_guard<std::mutex> l(_lock); // protect _block_queue
         return _inner_get_batch(next_block);
     }
 

@@ -107,18 +107,20 @@ Status VExchangeNode::get_next(RuntimeState* state, Block* block, bool* eos) {
     return status;
 }
 
-Status VExchangeNode::close(RuntimeState* state) {
-    if (is_closed()) {
-        return Status::OK();
-    }
-    START_AND_SCOPE_SPAN(state->get_tracer(), span, "VExchangeNode::close");
-
+void VExchangeNode::release_resource(RuntimeState* state) {
     if (_stream_recvr != nullptr) {
         _stream_recvr->close();
     }
     if (_is_merging) {
         _vsort_exec_exprs.close(state);
     }
+}
+
+Status VExchangeNode::close(RuntimeState* state) {
+    if (is_closed()) {
+        return Status::OK();
+    }
+    START_AND_SCOPE_SPAN(state->get_tracer(), span, "VExchangeNode::close");
 
     return ExecNode::close(state);
 }

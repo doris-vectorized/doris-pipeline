@@ -83,7 +83,7 @@ void PipelineFragmentContext::cancel(const PPlanFragmentCancelReason& reason,
         _cancel_reason = reason;
         _cancel_msg = msg;
         // To notify wait_for_start()
-        _runtime_state->get_query_fragments_ctx()->set_ready_to_execute(true);
+        _query_ctx->set_ready_to_execute(true);
 
         // must close stream_mgr to avoid dead lock in Exchange Node
         _exec_env->vstream_mgr()->cancel(_fragment_instance_id);

@@ -145,6 +145,7 @@ Status PipelineTask::execute(bool* eos) {
                 break;
             }
         }
+        *eos = false;
     }
 
     return Status::OK();
