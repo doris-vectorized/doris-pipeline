@@ -36,7 +36,7 @@ public:
     Status close(RuntimeState* state) override;
 
 private:
-    doris::vectorized::VExchangeNode* _exchange_node;
+    vectorized::VExchangeNode* _exchange_node;
 };
 
 class ExchangeSourceOperatorBuilder : public OperatorBuilder {

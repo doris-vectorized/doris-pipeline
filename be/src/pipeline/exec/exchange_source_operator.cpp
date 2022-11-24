@@ -19,7 +19,6 @@
 
 #include "common/status.h"
 #include "vec/exec/vexchange_node.h"
-#include "vec/runtime/vdata_stream_mgr.h"
 #include "vec/runtime/vdata_stream_recvr.h"
 
 namespace doris::pipeline {
@@ -29,7 +28,7 @@ ExchangeSourceOperator::ExchangeSourceOperator(OperatorBuilder* operator_templat
 
 Status ExchangeSourceOperator::init(ExecNode* exec_node, RuntimeState* state) {
     RETURN_IF_ERROR(Operator::init(exec_node, state));
-    _exchange_node = assert_cast<doris::vectorized::VExchangeNode*>(exec_node);
+    _exchange_node = assert_cast<vectorized::VExchangeNode*>(exec_node);
     return Status::OK();
 }
 

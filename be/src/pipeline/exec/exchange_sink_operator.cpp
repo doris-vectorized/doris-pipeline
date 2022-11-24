@@ -65,7 +65,7 @@ Status ExchangeSinkOperator::open(RuntimeState* state) {
 }
 
 bool ExchangeSinkOperator::can_write() {
-    return !_sink_buffer->is_full();
+    return !_sink_buffer->is_full() && _sink->channel_all_can_write();
 }
 
 Status ExchangeSinkOperator::finalize(RuntimeState* state) {

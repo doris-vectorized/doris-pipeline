@@ -34,26 +34,18 @@ public:
                      doris::vectorized::NewOlapScanNode* scan_node);
     Status prepare(RuntimeState* state) override;
     Status init(ExecNode* exec_node, RuntimeState* state) override;
-    //    Status open(RuntimeState* state) override; // NewOlapScanNode::_build_key_ranges_and_filters
 };
 
 class OlapScanOperatorBuilder : public ScanOperatorBuilder {
 public:
     OlapScanOperatorBuilder(uint32_t id, const std::string& name,
-                            // TupleId o_tuple_id, int64_t limit_per_scanner,
                             vectorized::NewOlapScanNode* new_olap_scan_node);
-    //            : ScanOperatorBuilder(id, name, dynamic_cast<ExecNode*>(new_olap_scan_node)),
-    //            _output_tuple_id(o_tuple_id), _limit_per_scanner(limit_per_scanner),
-    //            _new_olap_scan_node(new_olap_scan_node) {}
 
     OperatorPtr build_operator() override {
         return std::make_shared<OlapScanOperator>(this, _new_olap_scan_node);
     }
 
 private:
-    //    TupleId _output_tuple_id = -1;
-    //    // If sort info is set, push limit to each scanner;
-    //    int64_t _limit_per_scanner = -1;
     vectorized::NewOlapScanNode* _new_olap_scan_node;
 };
 
