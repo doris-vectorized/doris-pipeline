@@ -17,6 +17,7 @@
 
 #include "task_scheduler.h"
 
+#include "common/signal_handler.h"
 #include "pipeline_fragment_context.h"
 #include "util/thread.h"
 
@@ -221,6 +222,8 @@ void TaskScheduler::_do_work(size_t index) {
         }
         task->stop_worker_watcher();
         auto* fragment_ctx = task->fragment_context();
+        doris::signal::query_id_hi = fragment_ctx->get_query_id().hi;
+        doris::signal::query_id_lo = fragment_ctx->get_query_id().lo;
         bool canceled = fragment_ctx->is_canceled();
 
         auto check_state = task->get_state();

@@ -55,10 +55,6 @@ Status Channel::init(RuntimeState* state) {
 
     _query_id.set_hi(state->query_id().hi);
     _query_id.set_lo(state->query_id().lo);
-    // 如果两者都在同一个Arena或两者都不在Arena上，两者生命周期一起管理，或在堆上同时析构，或在同一个Arena上随Arena析构
-    // 如果两者在不同Arena上，则复制一份
-    // 如果request在Arena上，而query id在堆上，则复制一份
-    // 如果request在堆上，而query id在Arena上，则复制一份
     _brpc_request.set_allocated_query_id(&_query_id);
 
     _brpc_request.set_node_id(_dest_node_id);
