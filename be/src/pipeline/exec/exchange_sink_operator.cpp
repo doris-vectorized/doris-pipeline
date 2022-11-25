@@ -46,8 +46,9 @@ Status ExchangeSinkOperator::init(const TDataSink& tsink) {
     PUniqueId query_id;
     query_id.set_hi(_state->query_id().hi);
     query_id.set_lo(_state->query_id().lo);
-    _sink_buffer = std::make_unique<ExchangeSinkBuffer>(query_id, tsink.stream_sink.dest_node_id,
-                                                _sink->_sender_id, _state->be_number(), _context);
+    _sink_buffer =
+            std::make_unique<ExchangeSinkBuffer>(query_id, tsink.stream_sink.dest_node_id,
+                                                 _sink->_sender_id, _state->be_number(), _context);
     return Status::OK();
 }
 

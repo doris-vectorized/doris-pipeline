@@ -117,7 +117,7 @@ public:
     PipelineTaskState get_state() { return _cur_state; }
     void set_state(PipelineTaskState state);
     bool is_blocking_state() {
-        switch(_cur_state) {
+        switch (_cur_state) {
         case BLOCKED_FOR_DEPENDENCY:
         case BLOCKED_FOR_SOURCE:
         case BLOCKED_FOR_SINK:

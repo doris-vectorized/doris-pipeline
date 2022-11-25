@@ -33,7 +33,6 @@ namespace doris::pipeline {
 template <typename T>
 class SelfDeleteClosure : public google::protobuf::Closure {
 public:
-
     SelfDeleteClosure(InstanceLoId id, bool eos) : _id(id), _eos(eos) {}
     ~SelfDeleteClosure() override = default;
     SelfDeleteClosure(const SelfDeleteClosure& other) = delete;
@@ -52,8 +51,8 @@ public:
                 std::string err = fmt::format(
                         "failed to send brpc when exchange, error={}, error_text={}, client: {}, "
                         "latency = {}",
-                        berror(cntl.ErrorCode()), cntl.ErrorText(),
-                        BackendOptions::get_localhost(), cntl.latency_us());
+                        berror(cntl.ErrorCode()), cntl.ErrorText(), BackendOptions::get_localhost(),
+                        cntl.latency_us());
                 _fail_fn(_id, err);
             } else {
                 _suc_fn(_id, _eos, result);
@@ -76,8 +75,8 @@ private:
     bool _eos;
 };
 
-ExchangeSinkBuffer::ExchangeSinkBuffer(PUniqueId query_id, PlanNodeId dest_node_id, int send_id, int be_number,
-                       PipelineFragmentContext* context)
+ExchangeSinkBuffer::ExchangeSinkBuffer(PUniqueId query_id, PlanNodeId dest_node_id, int send_id,
+                                       int be_number, PipelineFragmentContext* context)
         : _is_finishing(false),
           _query_id(query_id),
           _dest_node_id(dest_node_id),
@@ -182,18 +181,18 @@ Status ExchangeSinkBuffer::_send_rpc(InstanceLoId id) {
     _closure->cntl.set_timeout_ms(request.channel->_brpc_timeout_ms);
     _closure->addFailedHandler(
             [&](const InstanceLoId& id, const std::string& err) { _failed(id, err); });
-    _closure->addSuccessHandler(
-            [&](const InstanceLoId& id, const bool& eos, const PTransmitDataResult& result) {
-                Status s = Status(result.status());
-                if (!s.ok()) {
-                    _failed(id, fmt::format("exchange req success but status isn't ok: {}",
-                                           s.get_error_msg()));
-                } else if (eos) {
-                    _ended(id);
-                } else {
-                    _send_rpc(id);
-                }
-            });
+    _closure->addSuccessHandler([&](const InstanceLoId& id, const bool& eos,
+                                    const PTransmitDataResult& result) {
+        Status s = Status(result.status());
+        if (!s.ok()) {
+            _failed(id,
+                    fmt::format("exchange req success but status isn't ok: {}", s.get_error_msg()));
+        } else if (eos) {
+            _ended(id);
+        } else {
+            _send_rpc(id);
+        }
+    });
 
     {
         SCOPED_SWITCH_THREAD_MEM_TRACKER_LIMITER(ExecEnv::GetInstance()->orphan_mem_tracker());

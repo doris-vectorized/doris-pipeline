@@ -65,7 +65,6 @@ private:
     phmap::flat_hash_map<InstanceLoId, PUniqueId> _instance_to_finst_id;
     phmap::flat_hash_map<InstanceLoId, bool> _instance_to_sending_by_pipeline;
 
-
     std::atomic<bool> _is_finishing;
     PUniqueId _query_id;
     PlanNodeId _dest_node_id;

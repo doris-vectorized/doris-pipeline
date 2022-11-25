@@ -851,7 +851,7 @@ Status ExecNode::get_next_after_projects(RuntimeState* state, vectorized::Block*
 }
 
 Status ExecNode::execute(RuntimeState* state, vectorized::Block* input_block,
-               vectorized::Block* output_block, bool* eos) {
+                         vectorized::Block* output_block, bool* eos) {
     return Status::NotSupported("{} not implements execute", get_name());
 }
 
