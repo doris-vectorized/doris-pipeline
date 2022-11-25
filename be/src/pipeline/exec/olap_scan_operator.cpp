@@ -25,17 +25,6 @@ OlapScanOperator::OlapScanOperator(OperatorBuilder* operator_template,
                                    vectorized::NewOlapScanNode* scan_node)
         : ScanOperator(operator_template, scan_node) {}
 
-Status OlapScanOperator::init(ExecNode* exec_node, RuntimeState* state) {
-    RETURN_IF_ERROR(ScanOperator::init(exec_node, state));
-    return Status::OK();
-}
-
-Status OlapScanOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ScanOperator::prepare(state));
-    SCOPED_CONSUME_MEM_TRACKER(mem_tracker());
-    return Status::OK();
-}
-
 OlapScanOperatorBuilder::OlapScanOperatorBuilder(uint32_t id, const std::string& name,
                                                  vectorized::NewOlapScanNode* new_olap_scan_node)
         : ScanOperatorBuilder(id, name, new_olap_scan_node),
