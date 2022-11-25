@@ -37,7 +37,7 @@ public:
 
     Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
 
-    bool is_pending_finish() override;
+    bool is_pending_finish() const override;
 
     Status open(RuntimeState* state) override;
 

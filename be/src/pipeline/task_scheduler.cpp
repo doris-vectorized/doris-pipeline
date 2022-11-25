@@ -229,7 +229,7 @@ void TaskScheduler::_do_work(size_t index) {
         auto check_state = task->get_state();
         if (check_state == PENDING_FINISH) {
             bool is_pending = task->is_pending_finish();
-            DCHECK(!is_pending) << "must not pending close " << task;
+            DCHECK(!is_pending) << "must not pending close " << task->debug_string();
             _try_close_task(task, canceled ? CANCELED : FINISHED);
             continue;
         }
@@ -248,7 +248,7 @@ void TaskScheduler::_do_work(size_t index) {
         auto status = task->execute(&eos);
         task->set_previous_core_id(index);
         if (!status.ok()) {
-            LOG(WARNING) << "Pipeline taks execute task fail " << task;
+            LOG(WARNING) << "Pipeline taks execute task fail " << task->debug_string();
             // exec failed，cancel all fragment instance
             fragment_ctx->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR, "execute fail");
             _try_close_task(task, CANCELED);

@@ -92,7 +92,7 @@ Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
     return Status::OK();
 }
 
-bool ExchangeSinkOperator::is_pending_finish() {
+bool ExchangeSinkOperator::is_pending_finish() const {
     return _sink_buffer->is_pending_finish();
 }
 

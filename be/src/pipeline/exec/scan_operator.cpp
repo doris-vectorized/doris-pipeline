@@ -51,7 +51,7 @@ Status ScanOperator::get_block(RuntimeState* state, vectorized::Block* block, bo
     return Status::OK();
 }
 
-bool ScanOperator::is_pending_finish() {
+bool ScanOperator::is_pending_finish() const {
     return _scan_node->_scanner_ctx && !_scan_node->_scanner_ctx->can_finish();
 }
 

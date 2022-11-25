@@ -47,8 +47,6 @@ public:
 
     Status finalize(RuntimeState* state) override;
 
-    bool is_pending_finish() override { return false; }
-
     Status close(RuntimeState* state) override;
 
 private:

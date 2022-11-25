@@ -203,4 +203,16 @@ void PipelineTask::set_state(PipelineTaskState state) {
     }
     _cur_state = state;
 }
+
+std::string PipelineTask::debug_string() const {
+    std::stringstream ss;
+    ss << "PipelineTask(" << _index << ")" << get_state_name(_cur_state) << "\nsink: ";
+    ss << _sink->debug_string();
+    ss << "\n operators(from source to root)";
+    for (auto operatr : _operators) {
+        ss << "\n" << operatr->debug_string();
+    }
+    return ss.str();
+}
+
 } // namespace doris::pipeline

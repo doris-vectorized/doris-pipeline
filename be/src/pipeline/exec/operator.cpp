@@ -91,6 +91,14 @@ const RowDescriptor& Operator::row_desc() {
     return _operator_builder->row_desc();
 }
 
+std::string Operator::debug_string() const {
+    std::stringstream ss;
+    ss << _operator_builder->get_name() << ", source: " << is_source();
+    ss << ", sink: " << is_sink() << ", is closed: " << _is_closed;
+    ss << ", is pending finish: " << is_pending_finish();
+    return ss.str();
+}
+
 /////////////////////////////////////// OperatorBuilder ////////////////////////////////////////////////////////////
 
 Status OperatorBuilder::prepare(doris::RuntimeState* state) {

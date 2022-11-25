@@ -54,7 +54,7 @@ Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block*
     return st;
 }
 
-bool ExchangeSourceOperator::is_pending_finish() {
+bool ExchangeSourceOperator::is_pending_finish() const {
     // TODO HappenLee
     return false;
 }

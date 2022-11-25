@@ -119,7 +119,7 @@ public:
     // - Source: scan thread do not exist
     // - Sink: RPC do not be disposed
     // - else return false
-    virtual bool is_pending_finish() { return false; }
+    virtual bool is_pending_finish() const { return false; }
 
     // TODO: should we keep the function
     // virtual bool is_finished() = 0;
@@ -140,6 +140,7 @@ public:
 
     Status link_profile(RuntimeProfile* parent);
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    std::string debug_string() const;
 
 protected:
     std::unique_ptr<MemTracker> _mem_tracker;
