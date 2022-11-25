@@ -20,20 +20,14 @@
 #include <utility>
 
 #include "scan_operator.h"
-
-namespace doris::vectorized {
-class NewOlapScanNode;
-}
+#include "vec/exec/scan/new_olap_scan_node.h"
 
 namespace doris::pipeline {
 
 class OlapScanOperatorBuilder;
 class OlapScanOperator : public ScanOperator {
 public:
-    OlapScanOperator(OperatorBuilder* operator_template,
-                     doris::vectorized::NewOlapScanNode* scan_node);
-    Status prepare(RuntimeState* state) override;
-    Status init(ExecNode* exec_node, RuntimeState* state) override;
+    OlapScanOperator(OperatorBuilder* operator_template, vectorized::NewOlapScanNode* scan_node);
 };
 
 class OlapScanOperatorBuilder : public ScanOperatorBuilder {
