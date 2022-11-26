@@ -235,6 +235,11 @@ void RuntimeProfile::divide(int n) {
     }
 }
 
+void RuntimeProfile::clear_children() {
+    std::lock_guard<std::mutex> l(_children_lock);
+    _children.clear();
+}
+
 void RuntimeProfile::compute_time_in_profile() {
     compute_time_in_profile(total_time_counter()->value());
 }
