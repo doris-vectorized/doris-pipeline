@@ -38,8 +38,6 @@ public:
     Status prepare(RuntimeState*) override;
     Status open(RuntimeState* state) override;
 
-    Status sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
-
     bool can_write() override;
 
     Status close(RuntimeState* state) override;
@@ -47,6 +45,7 @@ public:
     Status finalize(doris::RuntimeState* state) override { return Status::OK(); }
 
 private:
+    Status _inner_sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
     vectorized::AggregationNode* _agg_node;
     vectorized::Block _preagg_block = vectorized::Block();
 

@@ -40,14 +40,12 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    // return can write continue
-    Status sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
-
     Status finalize(RuntimeState* state) override { return Status::OK(); }
 
     bool can_write() override { return true; };
 
 private:
+    Status _inner_sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
     vectorized::VSortNode* _sort_node;
 };
 

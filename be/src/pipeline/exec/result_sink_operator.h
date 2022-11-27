@@ -43,13 +43,12 @@ public:
 
     bool can_write() override;
 
-    Status sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
-
     Status finalize(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;
 
 private:
+    Status _inner_sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
     vectorized::VResultSink* _sink;
     bool _finalized = false;
 };

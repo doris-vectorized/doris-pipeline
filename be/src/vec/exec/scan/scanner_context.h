@@ -129,11 +129,8 @@ public:
 
     VScanNode* parent() { return _parent; }
 
-    OpentelemetrySpan scan_span() { return _scan_span; }
-
     virtual bool empty_in_queue();
 
-public:
     // the unique id of this context
     std::string ctx_id;
     int32_t queue_idx = -1;

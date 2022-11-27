@@ -33,13 +33,11 @@ enum class SourceState : uint8_t {
     FINISHED = 2
 };
 
-//
 enum class SinkState : uint8_t {
     SINK_IDLE = 0, // can send block to sink
     SINK_BUSY = 1, // sink buffer is full， should wait sink to send some block
     FINISHED = 2
 };
-////////////////       DO NOT USE THE UP State     ////////////////
 
 class OperatorBuilder;
 class Operator;
@@ -96,17 +94,23 @@ public:
     virtual bool can_write() { return false; } // for sink
 
     // for pipeline
-    virtual Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
-        std::stringstream error_msg;
-        error_msg << " has not implements get_block";
-        return Status::NotSupported(error_msg.str());
+    Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+        auto st = _inner_get_block(state, block, eos);
+        if (st.ok() && block) {
+            _num_rows_returned += block->rows();
+            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+        }
+        return st;
     }
 
     // return can write continue
-    virtual Status sink(RuntimeState* state, vectorized::Block* block, bool eos) {
-        std::stringstream error_msg;
-        error_msg << " not a sink ";
-        return Status::NotSupported(error_msg.str());
+    Status sink(RuntimeState* state, vectorized::Block* block, bool eos) {
+        auto st = _inner_sink(state, block, eos);
+        if (st.ok() && block) {
+            _num_rows_returned += block->rows();
+            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+        }
+        return st;
     }
 
     virtual Status finalize(RuntimeState* state) {
@@ -143,6 +147,20 @@ public:
     std::string debug_string() const;
 
 protected:
+    // for pipeline
+    virtual Status _inner_get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+        std::stringstream error_msg;
+        error_msg << " has not implements get_block";
+        return Status::NotSupported(error_msg.str());
+    }
+
+    // return can write continue
+    virtual Status _inner_sink(RuntimeState* state, vectorized::Block* block, bool eos) {
+        std::stringstream error_msg;
+        error_msg << " not a sink ";
+        return Status::NotSupported(error_msg.str());
+    }
+
     std::unique_ptr<MemTracker> _mem_tracker;
 
     OperatorBuilder* _operator_builder;

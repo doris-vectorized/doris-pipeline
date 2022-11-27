@@ -41,11 +41,10 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
-
     bool can_read() override;
 
 private:
+    Status _inner_get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
     vectorized::VSortNode* _sort_node;
 };
 

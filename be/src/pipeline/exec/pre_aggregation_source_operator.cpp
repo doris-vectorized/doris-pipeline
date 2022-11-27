@@ -41,7 +41,7 @@ bool PreAggSourceOperator::can_read() {
     return _agg_context->has_data_or_finished();
 }
 
-Status PreAggSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+Status PreAggSourceOperator::_inner_get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     vectorized::Block* agg_block = nullptr;
     RETURN_IF_ERROR(_agg_context->get_block(&agg_block, eos));
@@ -53,8 +53,6 @@ Status PreAggSourceOperator::get_block(RuntimeState* state, vectorized::Block* b
     DCHECK(agg_block != nullptr);
 
     block->swap(*agg_block);
-    _num_rows_returned += block->rows();
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     _agg_context->return_free_block(agg_block);
 
     return Status::OK();
