@@ -67,7 +67,7 @@ Status AggSinkOperator::close(RuntimeState* state) {
 
 AggSinkOperatorBuilder::AggSinkOperatorBuilder(int32_t id, const std::string& name,
                                                vectorized::AggregationNode* exec_node)
-        : OperatorBuilder(id, name, exec_node),_agg_node(exec_node) {}
+        : OperatorBuilder(id, name, exec_node), _agg_node(exec_node) {}
 
 OperatorPtr AggSinkOperatorBuilder::build_operator() {
     return std::make_shared<AggSinkOperator>(this, _agg_node);
