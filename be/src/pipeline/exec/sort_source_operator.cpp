@@ -29,13 +29,7 @@ SortSourceOperator::SortSourceOperator(SortSourceOperatorBuilder* operator_build
                                        vectorized::VSortNode* sort_node)
         : Operator(operator_builder), _sort_node(sort_node) {}
 
-Status SortSourceOperator::init(doris::ExecNode* node, doris::RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::init(node, state));
-    return Status::OK();
-}
-
 Status SortSourceOperator::open(doris::RuntimeState* state) {
-    RETURN_IF_ERROR(_sort_node->alloc_resource(state));
     RETURN_IF_ERROR(Operator::open(state));
     return Status::OK();
 }

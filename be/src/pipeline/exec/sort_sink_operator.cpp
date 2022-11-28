@@ -29,11 +29,6 @@ SortSinkOperator::SortSinkOperator(SortSinkOperatorBuilder* operator_builder,
                                    vectorized::VSortNode* sort_node)
         : Operator(operator_builder), _sort_node(sort_node) {}
 
-Status SortSinkOperator::init(doris::ExecNode* node, doris::RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::init(node, state));
-    return Status::OK();
-}
-
 Status SortSinkOperator::open(doris::RuntimeState* state) {
     RETURN_IF_ERROR(Operator::open(state));
     RETURN_IF_ERROR(_sort_node->alloc_resource(state));

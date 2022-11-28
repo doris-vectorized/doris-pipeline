@@ -17,52 +17,51 @@
 
 #pragma once
 
-#include <utility>
-
 #include "operator.h"
+#include "vec/exec/vtable_function_node.h"
 
 namespace doris {
 
-namespace vectorized {
-class VSortNode;
-}
-
 namespace pipeline {
 
-class SortSourceOperatorBuilder;
+class TableFunctionSourceOperatorBuilder;
 
-class SortSourceOperator : public Operator {
+class TableFunctionSourceOperator : public Operator {
 public:
-    SortSourceOperator(SortSourceOperatorBuilder* operator_builder,
-                       vectorized::VSortNode* sort_node);
+    TableFunctionSourceOperator(TableFunctionSourceOperatorBuilder* operator_builder,
+                                vectorized::VTableFunctionNode* sort_node);
 
-    Status open(RuntimeState* state) override;
+    Status close(RuntimeState* state) override {
+        RETURN_IF_ERROR(_node->close(state));
+        return Operator::close(state);
+    }
 
-    Status close(RuntimeState* state) override;
+    Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override {
+        return _node->get_next(state, block, eos);
+    }
 
-    Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
-
-    bool can_read() override;
+    bool can_read() override { return _node->can_read(); }
 
 private:
-    vectorized::VSortNode* _sort_node;
+    vectorized::VTableFunctionNode* _node;
 };
 
-class SortSourceOperatorBuilder : public OperatorBuilder {
+class TableFunctionSourceOperatorBuilder : public OperatorBuilder {
 public:
-    SortSourceOperatorBuilder(int32_t id, const std::string& name,
-                              vectorized::VSortNode* sort_node);
+    TableFunctionSourceOperatorBuilder(int32_t id, const std::string& name,
+                                       vectorized::VTableFunctionNode* node)
+            : OperatorBuilder(id, name, node), _node(node) {}
 
     bool is_sink() const override { return false; }
 
     bool is_source() const override { return true; }
 
     OperatorPtr build_operator() override {
-        return std::make_shared<SortSourceOperator>(this, _sort_node);
+        return std::make_shared<TableFunctionSourceOperator>(this, _node);
     }
 
 private:
-    vectorized::VSortNode* _sort_node;
+    vectorized::VTableFunctionNode* _node;
 };
 
 } // namespace pipeline
