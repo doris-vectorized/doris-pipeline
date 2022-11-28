@@ -37,6 +37,7 @@ class MemPool;
 namespace pipeline {
 class AggSinkOperator;
 class AggregationSourceOperator;
+class PreAggSinkOperator;
 class PreAggSourceOperator;
 } // namespace pipeline
 
@@ -781,6 +782,7 @@ public:
 
 private:
     friend class pipeline::AggSinkOperator;
+    friend class pipeline::PreAggSinkOperator;
     friend class pipeline::AggregationSourceOperator;
     friend class pipeline::PreAggSourceOperator;
     // group by k1,k2

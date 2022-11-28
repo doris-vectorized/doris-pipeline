@@ -24,6 +24,7 @@
 #include "exec/exchange_sink_operator.h"
 #include "exec/exchange_source_operator.h"
 #include "exec/olap_scan_operator.h"
+#include "exec/pre_aggregation_sink_operator.h"
 #include "exec/pre_aggregation_source_operator.h"
 #include "exec/result_sink_operator.h"
 #include "exec/scan_node.h"
@@ -293,19 +294,24 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
     }
     case TPlanNodeType::AGGREGATION_NODE: {
         auto* agg_node = assert_cast<vectorized::AggregationNode*>(node);
-        auto agg_ctx = std::make_shared<AggContext>();
         auto new_pipe = add_pipeline();
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipe));
-        OperatorBuilderPtr agg_sink = std::make_shared<AggSinkOperatorBuilder>(
-                next_operator_builder_id(), "AggSinkOperator", agg_node, agg_ctx);
-        RETURN_IF_ERROR(new_pipe->set_sink(agg_sink));
         if (agg_node->is_streaming_preagg()) {
-            OperatorBuilderPtr agg_source = std::make_shared<PreAggSourceOperatorBuilder>(
-                    next_operator_builder_id(), "PAggSourceOperator", agg_node, agg_ctx);
-            RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
+            auto agg_ctx = std::make_shared<AggContext>();
+            OperatorBuilderPtr pre_agg_sink = std::make_shared<PreAggSinkOperatorBuilder>(
+                    next_operator_builder_id(), "PreAggSinkOperator", agg_node, agg_ctx);
+            RETURN_IF_ERROR(new_pipe->set_sink(pre_agg_sink));
+
+            OperatorBuilderPtr pre_agg_source = std::make_shared<PreAggSourceOperatorBuilder>(
+                    next_operator_builder_id(), "PreAggSourceOperator", agg_node, agg_ctx);
+            RETURN_IF_ERROR(cur_pipe->add_operator(pre_agg_source));
         } else {
+            OperatorBuilderPtr agg_sink = std::make_shared<AggSinkOperatorBuilder>(
+                    next_operator_builder_id(), "AggSinkOperator", agg_node);
+            RETURN_IF_ERROR(new_pipe->set_sink(agg_sink));
+
             OperatorBuilderPtr agg_source = std::make_shared<AggregationSourceOperatorBuilder>(
-                    next_operator_builder_id(), "AggregationSourceOperator", agg_node);
+                    next_operator_builder_id(), "AggSourceOperator", agg_node);
             RETURN_IF_ERROR(cur_pipe->add_operator(agg_source));
         }
         break;
