@@ -54,7 +54,7 @@ bool AggSinkOperator::can_write() {
     }
 }
 
-Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, bool eos) {
+Status AggSinkOperator::_inner_sink(RuntimeState* state, vectorized::Block* in_block, bool eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     if (!_agg_node->is_streaming_preagg()) {
         RETURN_IF_ERROR(_agg_node->sink(state, in_block, eos));
@@ -70,11 +70,8 @@ Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, b
             if (bock_from_ctx->rows() == 0) {
                 _agg_context->return_free_block(bock_from_ctx);
             } else {
-                _num_rows_returned += bock_from_ctx->rows();
                 _agg_node->_make_nullable_output_key(bock_from_ctx);
                 _agg_context->push_block(bock_from_ctx);
-                COUNTER_SET(_agg_node->_rows_returned_counter, _num_rows_returned);
-                COUNTER_SET(_rows_returned_counter, _num_rows_returned);
             }
         }
 

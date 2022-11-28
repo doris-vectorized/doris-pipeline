@@ -35,8 +35,6 @@ public:
 
     bool can_read() override; // for source
 
-    Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
-
     bool is_pending_finish() const override;
 
     Status open(RuntimeState* state) override;
@@ -44,6 +42,7 @@ public:
     Status close(RuntimeState* state) override;
 
 private:
+    Status _inner_get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
     vectorized::VScanNode* _scan_node;
 };
 

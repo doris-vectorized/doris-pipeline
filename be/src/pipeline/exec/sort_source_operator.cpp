@@ -52,7 +52,8 @@ bool SortSourceOperator::can_read() {
     return _sort_node->can_read();
 }
 
-Status SortSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+Status SortSourceOperator::_inner_get_block(RuntimeState* state, vectorized::Block* block,
+                                            bool* eos) {
     return _sort_node->pull(state, block, eos);
 }
 

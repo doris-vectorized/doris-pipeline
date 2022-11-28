@@ -38,7 +38,6 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     bool can_write() override;
-    Status sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
     bool is_pending_finish() const override;
     Status finalize(RuntimeState* state) override;
 
@@ -47,6 +46,7 @@ public:
     RuntimeState* state() { return _state; }
 
 private:
+    Status _inner_sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
     std::unique_ptr<ExchangeSinkBuffer> _sink_buffer;
     vectorized::VDataStreamSender* _sink;
     RuntimeState* _state = nullptr;

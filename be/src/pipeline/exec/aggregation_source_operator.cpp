@@ -46,7 +46,7 @@ bool AggregationSourceOperator::can_read() {
     return _agg_node->can_read();
 }
 
-Status AggregationSourceOperator::get_block(RuntimeState* state, vectorized::Block* block,
+Status AggregationSourceOperator::_inner_get_block(RuntimeState* state, vectorized::Block* block,
                                             bool* eos) {
     RETURN_IF_ERROR(_agg_node->pull(state, block, eos));
     _agg_node->_executor.update_memusage();
