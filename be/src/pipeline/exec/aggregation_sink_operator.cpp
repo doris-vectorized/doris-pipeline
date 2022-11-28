@@ -50,9 +50,7 @@ bool AggSinkOperator::can_write() {
 
 Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, bool eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    if (!_agg_node->is_streaming_preagg()) {
-        RETURN_IF_ERROR(_agg_node->sink(state, in_block, eos));
-    }
+    RETURN_IF_ERROR(_agg_node->sink(state, in_block, eos));
     return Status::OK();
 }
 
