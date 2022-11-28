@@ -32,7 +32,7 @@ class PreAggSinkOperatorBuilder;
 class PreAggSinkOperator : public Operator {
 public:
     PreAggSinkOperator(PreAggSinkOperatorBuilder* operator_builder, vectorized::AggregationNode*,
-                    std::shared_ptr<AggContext>);
+                       std::shared_ptr<AggContext>);
 
     Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState*) override;
@@ -57,7 +57,7 @@ private:
 class PreAggSinkOperatorBuilder : public OperatorBuilder {
 public:
     PreAggSinkOperatorBuilder(int32_t, const std::string&, vectorized::AggregationNode*,
-                            std::shared_ptr<AggContext>);
+                              std::shared_ptr<AggContext>);
 
     OperatorPtr build_operator() override;
 

@@ -22,8 +22,8 @@
 namespace doris::pipeline {
 
 PreAggSinkOperator::PreAggSinkOperator(PreAggSinkOperatorBuilder* operator_builder,
-                                 vectorized::AggregationNode* agg_node,
-                                 std::shared_ptr<AggContext> agg_context)
+                                       vectorized::AggregationNode* agg_node,
+                                       std::shared_ptr<AggContext> agg_context)
         : Operator(operator_builder), _agg_node(agg_node), _agg_context(std::move(agg_context)) {}
 
 Status PreAggSinkOperator::init(ExecNode* exec_node, RuntimeState* state) {
@@ -109,8 +109,8 @@ Status PreAggSinkOperator::close(RuntimeState* state) {
 ///////////////////////////////  operator template  ////////////////////////////////
 
 PreAggSinkOperatorBuilder::PreAggSinkOperatorBuilder(int32_t id, const std::string& name,
-                                                       vectorized::AggregationNode* exec_node,
-                                                       std::shared_ptr<AggContext> agg_context)
+                                                     vectorized::AggregationNode* exec_node,
+                                                     std::shared_ptr<AggContext> agg_context)
         : OperatorBuilder(id, name, exec_node),
           _agg_node(exec_node),
           _agg_context(std::move(agg_context)) {}
