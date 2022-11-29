@@ -34,7 +34,7 @@ Status EmptySetSourceOperator::get_block(RuntimeState* state, vectorized::Block*
 }
 
 EmptySetSourceOperatorBuilder::EmptySetSourceOperatorBuilder(
-        int32_t id, const string& name,vectorized::VEmptySetNode* empty_set_node)
+        int32_t id, const string& name, vectorized::VEmptySetNode* empty_set_node)
         : OperatorBuilder(id, name, empty_set_node), _empty_set_node(empty_set_node) {}
 
 } // namespace doris::pipeline
