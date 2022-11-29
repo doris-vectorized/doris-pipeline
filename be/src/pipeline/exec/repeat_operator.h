@@ -17,43 +17,46 @@
 
 #pragma once
 
-#include <utility>
-
 #include "operator.h"
 
-namespace doris::vectorized {
-class VScanNode;
-class VScanner;
-class ScannerContext;
-} // namespace doris::vectorized
-
-namespace doris::pipeline {
-
-class ScanOperator : public Operator {
+namespace doris {
+namespace vectorized {
+class VRepeatNode;
+class VExprContext;
+class Block;
+} // namespace vectorized
+namespace pipeline {
+class RepeatOperatorBuilder;
+class RepeatOperator : public Operator {
 public:
-    ScanOperator(OperatorBuilder* operator_builder, vectorized::VScanNode* scan_node);
+    RepeatOperator(RepeatOperatorBuilder* operator_builder, vectorized::VRepeatNode* repeat_node);
 
-    bool can_read() override; // for source
+    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
 
-    Status get_block(RuntimeState* state, vectorized::Block* block,
-                     SourceState& result_state) override;
-
-    bool is_pending_finish() const override;
+    Status prepare(RuntimeState* state) override;
 
     Status open(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;
 
+    Status get_block(RuntimeState* state, vectorized::Block* block,
+                     SourceState& source_state) override;
+
 private:
-    vectorized::VScanNode* _scan_node;
+    vectorized::VRepeatNode* _repeat_node;
+    std::unique_ptr<vectorized::Block> _child_block;
+    SourceState _child_source_state;
 };
 
-class ScanOperatorBuilder : public OperatorBuilder {
+class RepeatOperatorBuilder : public OperatorBuilder {
 public:
-    ScanOperatorBuilder(int32_t id, const std::string& name, ExecNode* exec_node)
-            : OperatorBuilder(id, name, exec_node) {}
+    RepeatOperatorBuilder(int32_t id, vectorized::VRepeatNode* repeat_node);
 
-    bool is_source() const override { return true; }
+    OperatorPtr build_operator() override;
+
+private:
+    vectorized::VRepeatNode* _repeat_node;
 };
 
-} // namespace doris::pipeline
+} // namespace pipeline
+} // namespace doris

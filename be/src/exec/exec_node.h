@@ -127,6 +127,10 @@ public:
     // Eg: Aggregation, Sort
     virtual Status pull(RuntimeState* state, vectorized::Block* output_block, bool* eos);
 
+    virtual Status push(RuntimeState* state, vectorized::Block* input_block, bool eos) {
+        return Status::OK();
+    }
+
     bool can_read() const { return _can_read; }
 
     // Sink Data to ExecNode to do some stock work, both need impl with method: get_result

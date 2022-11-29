@@ -79,11 +79,12 @@ Status ExchangeSinkOperator::finalize(RuntimeState* state) {
     return result;
 }
 
-Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block, bool eos) {
+Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
+                                  SourceState source_state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
-    RETURN_IF_ERROR(_sink->send(state, block, eos));
+    RETURN_IF_ERROR(_sink->send(state, block, source_state == SourceState::FINISHED));
 
     if (block) {
         _num_rows_returned += block->rows();

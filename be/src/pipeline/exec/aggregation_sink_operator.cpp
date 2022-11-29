@@ -48,10 +48,10 @@ bool AggSinkOperator::can_write() {
     return true;
 }
 
-Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, bool eos) {
+Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block,
+                             SourceState source_state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(_agg_node->sink(state, in_block, eos));
-    return Status::OK();
+    return _agg_node->sink(state, in_block, source_state == SourceState::FINISHED);
 }
 
 Status AggSinkOperator::close(RuntimeState* state) {

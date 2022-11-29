@@ -33,7 +33,8 @@ class EmptySetSourceOperator : public Operator {
 public:
     EmptySetSourceOperator(EmptySetSourceOperatorBuilder* operator_builder,
                            vectorized::VEmptySetNode* empty_set_node);
-    Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
+    Status get_block(RuntimeState* state, vectorized::Block* block,
+                     SourceState& source_state) override;
 
     bool can_read() override;
 

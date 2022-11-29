@@ -96,14 +96,16 @@ public:
     virtual bool can_write() { return false; } // for sink
 
     // for pipeline
-    virtual Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+    virtual Status get_block([[maybe_unused]] RuntimeState* runtime_state,
+                             [[maybe_unused]] vectorized::Block* block,
+                             [[maybe_unused]] SourceState& result_state) {
         std::stringstream error_msg;
         error_msg << " has not implements get_block";
         return Status::NotSupported(error_msg.str());
     }
 
     // return can write continue
-    virtual Status sink(RuntimeState* state, vectorized::Block* block, bool eos) {
+    virtual Status sink(RuntimeState* state, vectorized::Block* block, SourceState source_state) {
         std::stringstream error_msg;
         error_msg << " not a sink ";
         return Status::NotSupported(error_msg.str());

@@ -44,9 +44,10 @@ Status SortSinkOperator::close(doris::RuntimeState* state) {
     return Status::OK();
 }
 
-Status SortSinkOperator::sink(doris::RuntimeState* state, vectorized::Block* block, bool eos) {
+Status SortSinkOperator::sink(doris::RuntimeState* state, vectorized::Block* block,
+                              SourceState source_state) {
     // TODO pipeline when sort node's _reuse_mem is false, we should pass a new block to it.
-    RETURN_IF_ERROR(_sort_node->sink(state, block, eos));
+    RETURN_IF_ERROR(_sort_node->sink(state, block, source_state == SourceState::FINISHED));
     return Status::OK();
 }
 } // namespace doris::pipeline

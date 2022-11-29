@@ -33,7 +33,7 @@ public:
     Status open(RuntimeState* state) override;
     bool can_read() override;
     Status close(RuntimeState* state) override;
-    Status get_block(RuntimeState*, vectorized::Block*, bool*) override;
+    Status get_block(RuntimeState*, vectorized::Block*, SourceState& source_state) override;
 
 private:
     vectorized::AggregationNode* _agg_node;

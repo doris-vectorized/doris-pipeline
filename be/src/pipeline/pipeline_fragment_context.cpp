@@ -25,6 +25,7 @@
 #include "exec/exchange_sink_operator.h"
 #include "exec/exchange_source_operator.h"
 #include "exec/olap_scan_operator.h"
+#include "exec/repeat_operator.h"
 #include "exec/result_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/sort_sink_operator.h"
@@ -46,6 +47,7 @@
 #include "vec/exec/vaggregation_node.h"
 #include "vec/exec/vempty_set_node.h"
 #include "vec/exec/vexchange_node.h"
+#include "vec/exec/vrepeat_node.h"
 #include "vec/exec/vsort_node.h"
 #include "vec/runtime/vdata_stream_mgr.h"
 #include "vec/sink/vdata_stream_sender.h"
@@ -337,6 +339,14 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         OperatorBuilderPtr sort_source = std::make_shared<SortSourceOperatorBuilder>(
                 next_operator_builder_id(), "SortSourceOperator", sort_node);
         RETURN_IF_ERROR(cur_pipe->add_operator(sort_source));
+        break;
+    }
+    case TPlanNodeType::REPEAT_NODE: {
+        auto* repeat_node = assert_cast<vectorized::VRepeatNode*>(node);
+        RETURN_IF_ERROR(_build_pipelines(node->child(0), cur_pipe));
+        OperatorBuilderPtr builder =
+                std::make_shared<RepeatOperatorBuilder>(next_operator_builder_id(), repeat_node);
+        RETURN_IF_ERROR(cur_pipe->add_operator(builder));
         break;
     }
     default:

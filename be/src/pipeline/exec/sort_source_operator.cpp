@@ -52,8 +52,12 @@ bool SortSourceOperator::can_read() {
     return _sort_node->can_read();
 }
 
-Status SortSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
-    return _sort_node->pull(state, block, eos);
+Status SortSourceOperator::get_block(RuntimeState* state, vectorized::Block* block,
+                                     SourceState& source_state) {
+    bool eos = false;
+    RETURN_IF_ERROR(_sort_node->pull(state, block, &eos));
+    source_state = eos ? SourceState::FINISHED : SourceState::NO_MORE_DATA;
+    return Status::OK();
 }
 
 } // namespace doris::pipeline
