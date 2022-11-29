@@ -22,7 +22,7 @@
 namespace doris::pipeline {
 
 EmptySetSourceOperator::EmptySetSourceOperator(EmptySetSourceOperatorBuilder* operator_builder,
-                                       vectorized::VEmptySetNode* empty_set_node)
+                                               vectorized::VEmptySetNode* empty_set_node)
         : Operator(operator_builder), _empty_set_node(empty_set_node) {}
 
 bool EmptySetSourceOperator::can_read() {
@@ -33,8 +33,8 @@ Status EmptySetSourceOperator::get_block(RuntimeState* state, vectorized::Block*
     return _empty_set_node->get_next(state, block, eos);
 }
 
-EmptySetSourceOperatorBuilder::EmptySetSourceOperatorBuilder(int32_t id, const string& name,
-                                                             vectorized::VEmptySetNode* empty_set_node)
+EmptySetSourceOperatorBuilder::EmptySetSourceOperatorBuilder(
+        int32_t id, const string& name,vectorized::VEmptySetNode* empty_set_node)
         : OperatorBuilder(id, name, empty_set_node), _empty_set_node(empty_set_node) {}
 
 } // namespace doris::pipeline
