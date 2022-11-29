@@ -38,7 +38,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     bool can_write() override;
-    Status sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
+    Status sink(RuntimeState* state, vectorized::Block* block, SourceState source_state) override;
     bool is_pending_finish() const override;
     Status finalize(RuntimeState* state) override;
 

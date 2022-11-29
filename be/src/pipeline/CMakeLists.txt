@@ -40,7 +40,8 @@ set(PIPELINE_FILES
         exec/streaming_aggregation_sink_operator.cpp
         exec/agg_context.cpp
         exec/sort_source_operator.cpp
-        exec/sort_sink_operator.cpp)
+        exec/sort_sink_operator.cpp
+        exec/repeat_operator.cpp)
 
 add_library(Pipeline STATIC
         ${PIPELINE_FILES}

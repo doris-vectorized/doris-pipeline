@@ -41,7 +41,7 @@ public:
     Status close(RuntimeState* state) override;
 
     // return can write continue
-    Status sink(RuntimeState* state, vectorized::Block* block, bool eos) override;
+    Status sink(RuntimeState* state, vectorized::Block* block, SourceState source_state) override;
 
     Status finalize(RuntimeState* state) override { return Status::OK(); }
 

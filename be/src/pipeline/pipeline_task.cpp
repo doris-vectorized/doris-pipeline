@@ -116,8 +116,9 @@ Status PipelineTask::execute(bool* eos) {
         SCOPED_RAW_TIMER(&time_spent);
         RETURN_IF_ERROR(open());
     }
+
     while (!_fragment_context->is_canceled()) {
-        if (!_source->can_read()) {
+        if (!_source->can_read() && _data_state != SourceState::MORE_DATA) {
             set_state(BLOCKED_FOR_SOURCE);
             break;
         }
@@ -136,11 +137,12 @@ Status PipelineTask::execute(bool* eos) {
         // Pull block from operator chain
         {
             SCOPED_TIMER(_get_block_timer);
-            RETURN_IF_ERROR(_root->get_block(_state, block, eos));
+            RETURN_IF_ERROR(_root->get_block(_state, block, _data_state));
         }
+        *eos = _data_state == SourceState::FINISHED;
         if (_block->rows() != 0 || *eos) {
             SCOPED_TIMER(_sink_timer);
-            RETURN_IF_ERROR(_sink->sink(_state, block, *eos));
+            RETURN_IF_ERROR(_sink->sink(_state, block, _data_state));
             if (*eos) { // just return, the scheduler will do finish work
                 break;
             }

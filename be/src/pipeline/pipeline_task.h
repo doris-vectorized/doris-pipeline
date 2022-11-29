@@ -98,6 +98,7 @@ public:
               _opened(false),
               _state(state),
               _cur_state(NOT_READY),
+              _data_state(SourceState::DEPEND_ON_SOURCE),
               _fragment_context(fragment_context),
               _parent_profile(parent_profile) {}
 
@@ -178,6 +179,7 @@ private:
     RuntimeState* _state;
     int _previous_schedule_id = -1;
     PipelineTaskState _cur_state;
+    SourceState _data_state;
     std::unique_ptr<doris::vectorized::Block> _block;
     PipelineFragmentContext* _fragment_context;
 

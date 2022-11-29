@@ -45,9 +45,12 @@ bool ExchangeSourceOperator::can_read() {
     return _exchange_node->_stream_recvr->ready_to_read();
 }
 
-Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block* block,
+                                         SourceState& source_state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    auto st = _exchange_node->get_next(state, block, eos);
+    bool eos = false;
+    auto st = _exchange_node->get_next(state, block, &eos);
+    source_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
     if (block) {
         _num_rows_returned += block->rows();
     }

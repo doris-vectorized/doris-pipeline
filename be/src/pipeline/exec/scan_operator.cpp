@@ -43,9 +43,12 @@ bool ScanOperator::can_read() {
     }
 }
 
-Status ScanOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+Status ScanOperator::get_block(RuntimeState* state, vectorized::Block* block,
+                               SourceState& result_state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(_scan_node->get_next(state, block, eos));
+    bool eos = false;
+    RETURN_IF_ERROR(_scan_node->get_next(state, block, &eos));
+    result_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
     _num_rows_returned += block->rows();
     COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     return Status::OK();

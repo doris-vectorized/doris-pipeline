@@ -26,10 +26,10 @@
 
 namespace doris::pipeline {
 
-// Result of source pull data, init state is NO_MORE_DATA
+// Result of source pull data, init state is DEPEND_ON_SOURCE
 enum class SourceState : uint8_t {
-    NO_MORE_DATA = 0, //
-    MORE_DATA = 1,    // Still have data can read
+    DEPEND_ON_SOURCE = 0, // Operator has no more data in itself, needs to read from source.
+    MORE_DATA = 1,        // Still have data can read
     FINISHED = 2
 };
 
@@ -96,14 +96,16 @@ public:
     virtual bool can_write() { return false; } // for sink
 
     // for pipeline
-    virtual Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
+    virtual Status get_block([[maybe_unused]] RuntimeState* runtime_state,
+                             [[maybe_unused]] vectorized::Block* block,
+                             [[maybe_unused]] SourceState& result_state) {
         std::stringstream error_msg;
         error_msg << " has not implements get_block";
         return Status::NotSupported(error_msg.str());
     }
 
     // return can write continue
-    virtual Status sink(RuntimeState* state, vectorized::Block* block, bool eos) {
+    virtual Status sink(RuntimeState* state, vectorized::Block* block, SourceState source_state) {
         std::stringstream error_msg;
         error_msg << " not a sink ";
         return Status::NotSupported(error_msg.str());

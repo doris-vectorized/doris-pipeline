@@ -41,7 +41,8 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    Status get_block(RuntimeState* state, vectorized::Block* block, bool* eos) override;
+    Status get_block(RuntimeState* state, vectorized::Block* block,
+                     SourceState& source_state) override;
 
     bool can_read() override;
 

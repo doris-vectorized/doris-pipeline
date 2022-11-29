@@ -40,14 +40,15 @@ bool StreamingAggSourceOperator::can_read() {
 }
 
 Status StreamingAggSourceOperator::get_block(RuntimeState* state, vectorized::Block* block,
-                                             bool* eos) {
+                                             SourceState& source_state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
+    bool eos = false;
     if (!_agg_context->data_exhausted()) {
         std::unique_ptr<vectorized::Block> agg_block;
         RETURN_IF_ERROR(_agg_context->get_block(&agg_block));
 
         if (_agg_context->data_exhausted()) {
-            RETURN_IF_ERROR(_agg_node->pull(state, block, eos));
+            RETURN_IF_ERROR(_agg_node->pull(state, block, &eos));
         } else {
             block->swap(*agg_block);
             COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -55,8 +56,10 @@ Status StreamingAggSourceOperator::get_block(RuntimeState* state, vectorized::Bl
             _agg_context->return_free_block(std::move(agg_block));
         }
     } else {
-        RETURN_IF_ERROR(_agg_node->pull(state, block, eos));
+        RETURN_IF_ERROR(_agg_node->pull(state, block, &eos));
     }
+
+    source_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
 
     return Status::OK();
 }

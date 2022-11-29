@@ -29,8 +29,12 @@ bool EmptySetSourceOperator::can_read() {
     return true;
 }
 
-Status EmptySetSourceOperator::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
-    return _empty_set_node->get_next(state, block, eos);
+Status EmptySetSourceOperator::get_block(RuntimeState* state, vectorized::Block* block,
+                                         SourceState& source_state) {
+    bool eos = false;
+    RETURN_IF_ERROR(_empty_set_node->get_next(state, block, &eos));
+    source_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
+    return Status::OK();
 }
 
 EmptySetSourceOperatorBuilder::EmptySetSourceOperatorBuilder(

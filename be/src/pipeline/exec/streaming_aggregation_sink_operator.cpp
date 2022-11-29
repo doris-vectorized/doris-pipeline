@@ -49,7 +49,8 @@ bool StreamingAggSinkOperator::can_write() {
     return _agg_context->has_enough_space_to_push();
 }
 
-Status StreamingAggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block, bool eos) {
+Status StreamingAggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block,
+                                      SourceState source_state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     Status ret = Status::OK();
     if (in_block && in_block->rows() > 0) {
@@ -62,7 +63,7 @@ Status StreamingAggSinkOperator::sink(RuntimeState* state, vectorized::Block* in
         }
     }
 
-    if (UNLIKELY(eos)) {
+    if (UNLIKELY(source_state == SourceState::FINISHED)) {
         _agg_context->set_finish();
     }
     return Status::OK();
