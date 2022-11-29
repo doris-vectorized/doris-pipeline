@@ -25,10 +25,10 @@ class AggregationNode;
 }
 namespace pipeline {
 
-class PreAggSourceOperator : public Operator {
+class StreamingAggSourceOperator : public Operator {
 public:
-    PreAggSourceOperator(OperatorBuilder*, vectorized::AggregationNode*,
-                         std::shared_ptr<AggContext>);
+    StreamingAggSourceOperator(OperatorBuilder*, vectorized::AggregationNode*,
+                               std::shared_ptr<AggContext>);
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     bool can_read() override;
@@ -40,10 +40,10 @@ private:
     std::shared_ptr<AggContext> _agg_context;
 };
 
-class PreAggSourceOperatorBuilder : public OperatorBuilder {
+class StreamingAggSourceOperatorBuilder : public OperatorBuilder {
 public:
-    PreAggSourceOperatorBuilder(int32_t, const std::string&, vectorized::AggregationNode*,
-                                std::shared_ptr<AggContext>);
+    StreamingAggSourceOperatorBuilder(int32_t, const std::string&, vectorized::AggregationNode*,
+                                      std::shared_ptr<AggContext>);
 
     bool is_source() const override { return true; }
 

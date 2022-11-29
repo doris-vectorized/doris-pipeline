@@ -28,29 +28,32 @@ namespace pipeline {
 class AggContext {
 public:
     AggContext() = default;
-    ~AggContext() { close(); }
-    vectorized::Block* get_free_block();
+    ~AggContext() { DCHECK(_is_finished); }
 
-    void return_free_block(vectorized::Block*);
+    std::unique_ptr<vectorized::Block> get_free_block();
+
+    void return_free_block(std::unique_ptr<vectorized::Block>);
 
     bool has_data_or_finished();
-    Status get_block(vectorized::Block** block, bool* eos);
+    Status get_block(std::unique_ptr<vectorized::Block>* block);
 
     bool has_enough_space_to_push();
-    void push_block(vectorized::Block*);
+    void push_block(std::unique_ptr<vectorized::Block>);
 
     void set_finish();
     void set_canceled(); // should set before finish
     bool is_finish();
-    void close();
+
+    bool data_exhausted() { return _data_exhausted; }
 
 private:
     std::mutex _free_blocks_lock;
-    std::vector<vectorized::Block*> _free_blocks;
+    std::vector<std::unique_ptr<vectorized::Block>> _free_blocks;
 
     std::mutex _transfer_lock;
-    std::list<vectorized::Block*> _blocks_queue;
+    std::list<std::unique_ptr<vectorized::Block>> _blocks_queue;
 
+    bool _data_exhausted = false;
     bool _is_finished = false;
     bool _is_canceled = false;
     int64_t _cur_bytes_in_queue = 0;

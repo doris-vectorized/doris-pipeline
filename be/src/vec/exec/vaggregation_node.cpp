@@ -489,7 +489,6 @@ Status AggregationNode::open(RuntimeState* state) {
         RETURN_IF_ERROR_AND_CHECK_SPAN(_children[0]->get_next_after_projects(state, &block, &eos),
                                        _children[0]->get_next_span(), eos);
         RETURN_IF_ERROR(sink(state, &block, eos));
-        _executor.update_memusage();
     }
     _children[0]->close(state);
 
@@ -498,6 +497,18 @@ Status AggregationNode::open(RuntimeState* state) {
 
 Status AggregationNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
     return Status::NotSupported("Not Implemented Aggregation Node::get_next scalar");
+}
+
+Status AggregationNode::do_pre_agg(vectorized::Block* input_block,
+                                   vectorized::Block* output_block) {
+    RETURN_IF_ERROR(_executor.pre_agg(input_block, output_block));
+
+    // pre stream agg need use _num_row_return to decide whether to do pre stream agg
+    _num_rows_returned += output_block->rows();
+    _make_nullable_output_key(output_block);
+    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+    _executor.update_memusage();
+    return Status::OK();
 }
 
 Status AggregationNode::get_next(RuntimeState* state, Block* block, bool* eos) {
@@ -516,18 +527,13 @@ Status AggregationNode::get_next(RuntimeState* state, Block* block, bool* eos) {
                     _children[0]->get_next_span(), child_eos);
         } while (_preagg_block.rows() == 0 && !child_eos);
         if (_preagg_block.rows() != 0) {
-            RETURN_IF_ERROR(_executor.pre_agg(&_preagg_block, block));
+            RETURN_IF_ERROR(do_pre_agg(&_preagg_block, block));
         } else {
-            RETURN_IF_ERROR(_executor.get_result(state, block, eos));
+            RETURN_IF_ERROR(pull(state, block, eos));
         }
-        // pre stream agg need use _num_row_return to decide whether to do pre stream agg
-        _num_rows_returned += block->rows();
-        _make_nullable_output_key(block);
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     } else {
         RETURN_IF_ERROR(pull(state, block, eos));
     }
-    _executor.update_memusage();
     return Status::OK();
 }
 
@@ -544,6 +550,7 @@ Status AggregationNode::pull(doris::RuntimeState* state, vectorized::Block* bloc
 Status AggregationNode::sink(doris::RuntimeState* state, vectorized::Block* in_block, bool eos) {
     if (in_block->rows() > 0) {
         RETURN_IF_ERROR(_executor.execute(in_block));
+        _executor.update_memusage();
     }
     if (eos) _can_read = true;
     return Status::OK();

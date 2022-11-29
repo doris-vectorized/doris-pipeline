@@ -24,12 +24,12 @@
 #include "exec/exchange_sink_operator.h"
 #include "exec/exchange_source_operator.h"
 #include "exec/olap_scan_operator.h"
-#include "exec/pre_aggregation_sink_operator.h"
-#include "exec/pre_aggregation_source_operator.h"
 #include "exec/result_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/sort_sink_operator.h"
 #include "exec/sort_source_operator.h"
+#include "exec/streaming_aggregation_sink_operator.h"
+#include "exec/streaming_aggregation_source_operator.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "pipeline_task.h"
@@ -298,12 +298,12 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         RETURN_IF_ERROR(_build_pipelines(node->child(0), new_pipe));
         if (agg_node->is_streaming_preagg()) {
             auto agg_ctx = std::make_shared<AggContext>();
-            OperatorBuilderPtr pre_agg_sink = std::make_shared<PreAggSinkOperatorBuilder>(
-                    next_operator_builder_id(), "PreAggSinkOperator", agg_node, agg_ctx);
+            OperatorBuilderPtr pre_agg_sink = std::make_shared<StreamingAggSinkOperatorBuilder>(
+                    next_operator_builder_id(), "StreamingAggSinkOperator", agg_node, agg_ctx);
             RETURN_IF_ERROR(new_pipe->set_sink(pre_agg_sink));
 
-            OperatorBuilderPtr pre_agg_source = std::make_shared<PreAggSourceOperatorBuilder>(
-                    next_operator_builder_id(), "PreAggSourceOperator", agg_node, agg_ctx);
+            OperatorBuilderPtr pre_agg_source = std::make_shared<StreamingAggSourceOperatorBuilder>(
+                    next_operator_builder_id(), "StreamingAggSourceOperator", agg_node, agg_ctx);
             RETURN_IF_ERROR(cur_pipe->add_operator(pre_agg_source));
         } else {
             OperatorBuilderPtr agg_sink = std::make_shared<AggSinkOperatorBuilder>(

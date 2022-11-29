@@ -25,23 +25,23 @@
 namespace doris {
 namespace pipeline {
 
-vectorized::Block* AggContext::get_free_block() {
+std::unique_ptr<vectorized::Block> AggContext::get_free_block() {
     {
         std::lock_guard<std::mutex> l(_free_blocks_lock);
         if (!_free_blocks.empty()) {
-            auto block = _free_blocks.back();
+            auto block = std::move(_free_blocks.back());
             _free_blocks.pop_back();
             return block;
         }
     }
 
-    return new vectorized::Block();
+    return std::make_unique<vectorized::Block>();
 }
 
-void AggContext::return_free_block(vectorized::Block* block) {
+void AggContext::return_free_block(std::unique_ptr<vectorized::Block> block) {
     DCHECK(block->rows() == 0);
     std::lock_guard<std::mutex> l(_free_blocks_lock);
-    _free_blocks.emplace_back(block);
+    _free_blocks.emplace_back(std::move(block));
 }
 
 bool AggContext::has_data_or_finished() {
@@ -49,21 +49,18 @@ bool AggContext::has_data_or_finished() {
     return !_blocks_queue.empty() || _is_finished;
 }
 
-Status AggContext::get_block(vectorized::Block** block, bool* eos) {
+Status AggContext::get_block(std::unique_ptr<vectorized::Block>* block) {
     std::unique_lock<std::mutex> l(_transfer_lock);
     if (_is_canceled) {
         return Status::InternalError("AggContext canceled");
     }
     if (!_blocks_queue.empty()) {
-        *eos = false;
-        *block = _blocks_queue.front();
+        *block = std::move(_blocks_queue.front());
         _blocks_queue.pop_front();
         _cur_bytes_in_queue -= (*block)->allocated_bytes();
     } else {
-        if (_is_finished
-            //            && !_is_canceled
-        ) {
-            *eos = true;
+        if (_is_finished) {
+            _data_exhausted = true;
         }
     }
     return Status::OK();
@@ -74,13 +71,13 @@ bool AggContext::has_enough_space_to_push() {
     return _cur_bytes_in_queue < MAX_BYTE_OF_QUEUE / 2;
 }
 
-void AggContext::push_block(vectorized::Block* block) {
+void AggContext::push_block(std::unique_ptr<vectorized::Block> block) {
     if (!block) {
         return;
     }
     std::unique_lock<std::mutex> l(_transfer_lock);
-    _blocks_queue.emplace_back(block);
-    _cur_bytes_in_queue += block->allocated_bytes();
+    _blocks_queue.emplace_back(std::move(block));
+    _cur_bytes_in_queue += _blocks_queue.back()->allocated_bytes();
 }
 
 void AggContext::set_finish() {
@@ -98,14 +95,6 @@ void AggContext::set_canceled() {
 bool AggContext::is_finish() {
     std::unique_lock<std::mutex> l(_transfer_lock);
     return _is_finished;
-}
-void AggContext::close() {
-    DCHECK(_is_finished);
-    std::unique_lock<std::mutex> l(_transfer_lock);
-    std::for_each(_blocks_queue.begin(), _blocks_queue.end(),
-                  std::default_delete<vectorized::Block>());
-    std::for_each(_free_blocks.begin(), _free_blocks.end(),
-                  std::default_delete<vectorized::Block>());
 }
 
 } // namespace pipeline
