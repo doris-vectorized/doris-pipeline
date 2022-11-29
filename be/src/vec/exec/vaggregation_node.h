@@ -37,8 +37,8 @@ class MemPool;
 namespace pipeline {
 class AggSinkOperator;
 class AggregationSourceOperator;
-class PreAggSinkOperator;
-class PreAggSourceOperator;
+class StreamingAggSinkOperator;
+class StreamingAggSourceOperator;
 } // namespace pipeline
 
 namespace vectorized {
@@ -778,13 +778,14 @@ public:
     virtual void release_resource(RuntimeState* state) override;
     Status pull(doris::RuntimeState* state, vectorized::Block* output_block, bool* eos) override;
     Status sink(doris::RuntimeState* state, vectorized::Block* input_block, bool eos) override;
+    Status do_pre_agg(vectorized::Block* input_block, vectorized::Block* output_block);
     bool is_streaming_preagg() { return _is_streaming_preagg; }
 
 private:
     friend class pipeline::AggSinkOperator;
-    friend class pipeline::PreAggSinkOperator;
+    friend class pipeline::StreamingAggSinkOperator;
     friend class pipeline::AggregationSourceOperator;
-    friend class pipeline::PreAggSourceOperator;
+    friend class pipeline::StreamingAggSourceOperator;
     // group by k1,k2
     std::vector<VExprContext*> _probe_expr_ctxs;
     // left / full join will change the key nullable make output/input solt
