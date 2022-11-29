@@ -50,7 +50,7 @@ Status AggregationSourceOperator::get_block(RuntimeState* state, vectorized::Blo
                                             SourceState& source_state) {
     bool eos = false;
     RETURN_IF_ERROR(_agg_node->pull(state, block, &eos));
-    source_state = eos ? SourceState::FINISHED : SourceState::NO_MORE_DATA;
+    source_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
     return Status::OK();
 }
 

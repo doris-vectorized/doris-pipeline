@@ -98,7 +98,7 @@ public:
               _opened(false),
               _state(state),
               _cur_state(NOT_READY),
-              _data_state(SourceState::NO_MORE_DATA),
+              _data_state(SourceState::DEPEND_ON_SOURCE),
               _fragment_context(fragment_context),
               _parent_profile(parent_profile) {}
 

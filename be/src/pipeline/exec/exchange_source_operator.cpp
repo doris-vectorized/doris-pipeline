@@ -50,7 +50,7 @@ Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block*
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     bool eos = false;
     auto st = _exchange_node->get_next(state, block, &eos);
-    source_state = eos ? SourceState::FINISHED : SourceState::NO_MORE_DATA;
+    source_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
     if (block) {
         _num_rows_returned += block->rows();
     }

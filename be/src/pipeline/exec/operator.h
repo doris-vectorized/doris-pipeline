@@ -26,10 +26,10 @@
 
 namespace doris::pipeline {
 
-// Result of source pull data, init state is NO_MORE_DATA
+// Result of source pull data, init state is DEPEND_ON_SOURCE
 enum class SourceState : uint8_t {
-    NO_MORE_DATA = 0, //
-    MORE_DATA = 1,    // Still have data can read
+    DEPEND_ON_SOURCE = 0, // Operator has no more data in itself, needs to read from source.
+    MORE_DATA = 1,        // Still have data can read
     FINISHED = 2
 };
 

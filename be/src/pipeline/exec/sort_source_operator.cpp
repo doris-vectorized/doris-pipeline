@@ -56,7 +56,7 @@ Status SortSourceOperator::get_block(RuntimeState* state, vectorized::Block* blo
                                      SourceState& source_state) {
     bool eos = false;
     RETURN_IF_ERROR(_sort_node->pull(state, block, &eos));
-    source_state = eos ? SourceState::FINISHED : SourceState::NO_MORE_DATA;
+    source_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
     return Status::OK();
 }
 

@@ -48,7 +48,7 @@ Status ScanOperator::get_block(RuntimeState* state, vectorized::Block* block,
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     bool eos = false;
     RETURN_IF_ERROR(_scan_node->get_next(state, block, &eos));
-    result_state = eos ? SourceState::FINISHED : SourceState::NO_MORE_DATA;
+    result_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
     _num_rows_returned += block->rows();
     COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     return Status::OK();
