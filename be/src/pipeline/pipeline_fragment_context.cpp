@@ -21,6 +21,7 @@
 #include "exec/aggregation_sink_operator.h"
 #include "exec/aggregation_source_operator.h"
 #include "exec/data_sink.h"
+#include "exec/empty_set_operator.h"
 #include "exec/exchange_sink_operator.h"
 #include "exec/exchange_source_operator.h"
 #include "exec/olap_scan_operator.h"
@@ -43,6 +44,7 @@
 #include "vec/exec/scan/new_olap_scan_node.h"
 #include "vec/exec/scan/vscan_node.h"
 #include "vec/exec/vaggregation_node.h"
+#include "vec/exec/vempty_set_node.h"
 #include "vec/exec/vexchange_node.h"
 #include "vec/exec/vsort_node.h"
 #include "vec/runtime/vdata_stream_mgr.h"
@@ -289,6 +291,13 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
     case TPlanNodeType::EXCHANGE_NODE: {
         OperatorBuilderPtr operator_t = std::make_shared<ExchangeSourceOperatorBuilder>(
                 next_operator_builder_id(), "ExchangeSourceOperator", node);
+        RETURN_IF_ERROR(cur_pipe->add_operator(operator_t));
+        break;
+    }
+    case TPlanNodeType::EMPTY_SET_NODE: {
+        auto* empty_set_node = assert_cast<vectorized::VEmptySetNode*>(node);
+        OperatorBuilderPtr operator_t = std::make_shared<EmptySetSourceOperatorBuilder>(
+                next_operator_builder_id(), "EmptySetSourceOperator", empty_set_node);
         RETURN_IF_ERROR(cur_pipe->add_operator(operator_t));
         break;
     }
