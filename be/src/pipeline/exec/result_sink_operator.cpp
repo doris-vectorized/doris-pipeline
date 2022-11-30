@@ -30,6 +30,7 @@ Status ResultSinkOperator::init(const TDataSink& tsink) {
 }
 
 Status ResultSinkOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
     return _sink->prepare(state);
 }
 

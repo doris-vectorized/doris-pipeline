@@ -33,6 +33,7 @@ Status ExchangeSourceOperator::init(ExecNode* exec_node, RuntimeState* state) {
 }
 
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
     _exchange_node->_rows_returned_counter = _rows_returned_counter;
     return Status::OK();
 }

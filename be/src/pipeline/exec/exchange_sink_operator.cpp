@@ -53,18 +53,13 @@ Status ExchangeSinkOperator::init(const TDataSink& tsink) {
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
-    _mem_tracker = std::make_unique<MemTracker>(
-            "ExchangeSinkOperator:" + print_id(state->fragment_instance_id()),
-            _runtime_profile.get());
-    SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
-
+    RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_sink->prepare(state));
     _sink->registe_channels(_sink_buffer.get());
     return Status::OK();
 }
 
 Status ExchangeSinkOperator::open(RuntimeState* state) {
-    SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
     RETURN_IF_ERROR(_sink->open(state));
     return Status::OK();
 }
@@ -82,7 +77,6 @@ Status ExchangeSinkOperator::finalize(RuntimeState* state) {
 Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
                                   SourceState source_state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    SCOPED_CONSUME_MEM_TRACKER(_mem_tracker.get());
 
     RETURN_IF_ERROR(_sink->send(state, block, source_state == SourceState::FINISHED));
 
