@@ -55,9 +55,10 @@ Status AggContext::get_block(std::unique_ptr<vectorized::Block>* block) {
         return Status::InternalError("AggContext canceled");
     }
     if (!_blocks_queue.empty()) {
-        *block = std::move(_blocks_queue.front());
+        auto [block_ptr, block_size] = std::move(_blocks_queue.front());
+        *block = std::move(block_ptr);
         _blocks_queue.pop_front();
-        _cur_bytes_in_queue -= (*block)->allocated_bytes();
+        _cur_bytes_in_queue -= block_size;
     } else {
         if (_is_finished) {
             _data_exhausted = true;
@@ -75,9 +76,13 @@ void AggContext::push_block(std::unique_ptr<vectorized::Block> block) {
     if (!block) {
         return;
     }
+    auto block_size = block->allocated_bytes();
     std::unique_lock<std::mutex> l(_transfer_lock);
-    _blocks_queue.emplace_back(std::move(block));
-    _cur_bytes_in_queue += _blocks_queue.back()->allocated_bytes();
+    _blocks_queue.emplace_back(std::move(block), block_size);
+    _cur_bytes_in_queue += block_size;
+
+    _max_bytes_in_queue = std::max(_max_bytes_in_queue, _cur_bytes_in_queue);
+    _max_size_of_queue = std::max(_max_size_of_queue, (int64)_blocks_queue.size());
 }
 
 void AggContext::set_finish() {

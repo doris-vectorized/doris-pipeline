@@ -33,7 +33,6 @@ class AggSinkOperator : public Operator {
 public:
     AggSinkOperator(AggSinkOperatorBuilder* operator_builder, vectorized::AggregationNode*);
 
-    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState*) override;
     Status open(RuntimeState* state) override;
 
@@ -47,7 +46,6 @@ public:
 
 private:
     vectorized::AggregationNode* _agg_node;
-    int64_t get_child_return_rows() { return _child->rows_returned(); }
 };
 
 class AggSinkOperatorBuilder : public OperatorBuilder {

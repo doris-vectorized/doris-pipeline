@@ -46,8 +46,6 @@ Status PipelineTask::prepare(RuntimeState* state) {
     for (auto& o : _operators) {
         RETURN_IF_ERROR(o->prepare(state));
     }
-    _task_profile->add_child(_sink->runtime_profile(), true, nullptr);
-    RETURN_IF_ERROR(_root->link_profile(_task_profile.get()));
     _block.reset(new doris::vectorized::Block());
     _init_state();
     _prepared = true;

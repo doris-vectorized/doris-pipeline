@@ -130,21 +130,16 @@ public:
 
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
-    /// Only use in vectorized exec engine to check whether reach limit and cut num row for block
-    // and add block rows for profile
-    void reached_limit(vectorized::Block* block, bool* eos);
-
     const OperatorBuilder* operator_builder() const { return _operator_builder; }
 
     const RowDescriptor& row_desc();
 
-    int64_t rows_returned() const { return _num_rows_returned; }
-
-    Status link_profile(RuntimeProfile* parent);
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
     std::string debug_string() const;
 
 protected:
+    void _fresh_exec_timer(ExecNode* node);
+
     std::unique_ptr<MemTracker> _mem_tracker;
 
     OperatorBuilder* _operator_builder;
@@ -153,13 +148,8 @@ protected:
     OperatorPtr _child;
 
     std::unique_ptr<RuntimeProfile> _runtime_profile;
-    int64_t _num_rows_returned;
-    RuntimeProfile::Counter* _rows_returned_counter = nullptr;
-    RuntimeProfile::Counter* _rows_returned_rate = nullptr;
     // TODO pipeline Account for peak memory used by this operator
     RuntimeProfile::Counter* _memory_used_counter = nullptr;
-
-    int64_t _limit;
 
 private:
     bool _is_closed = false;

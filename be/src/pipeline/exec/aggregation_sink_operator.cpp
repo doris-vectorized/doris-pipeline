@@ -25,20 +25,14 @@ AggSinkOperator::AggSinkOperator(AggSinkOperatorBuilder* operator_builder,
                                  vectorized::AggregationNode* agg_node)
         : Operator(operator_builder), _agg_node(agg_node) {}
 
-Status AggSinkOperator::init(ExecNode* exec_node, RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::init(exec_node, state));
-    return Status::OK();
-}
-
 Status AggSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _agg_node->increase_ref();
-    _agg_node->_child_return_rows =
-            std::bind<int64_t>(&AggSinkOperator::get_child_return_rows, this);
     return Status::OK();
 }
 
 Status AggSinkOperator::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(Operator::open(state));
     RETURN_IF_ERROR(_agg_node->alloc_resource(state));
     return Status::OK();
@@ -55,6 +49,7 @@ Status AggSinkOperator::sink(RuntimeState* state, vectorized::Block* in_block,
 }
 
 Status AggSinkOperator::close(RuntimeState* state) {
+    _fresh_exec_timer(_agg_node);
     if (!_agg_node->decrease_ref()) {
         _agg_node->release_resource(state);
     }

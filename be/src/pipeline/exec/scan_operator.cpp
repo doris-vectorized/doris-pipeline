@@ -26,6 +26,7 @@ ScanOperator::ScanOperator(OperatorBuilder* operator_builder, vectorized::VScanN
         : Operator(operator_builder), _scan_node(scan_node) {}
 
 Status ScanOperator::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(Operator::open(state));
     return _scan_node->open(state);
 }
@@ -49,8 +50,6 @@ Status ScanOperator::get_block(RuntimeState* state, vectorized::Block* block,
     bool eos = false;
     RETURN_IF_ERROR(_scan_node->get_next(state, block, &eos));
     result_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
-    _num_rows_returned += block->rows();
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     return Status::OK();
 }
 
@@ -62,6 +61,7 @@ Status ScanOperator::close(RuntimeState* state) {
     if (!is_closed()) {
         RETURN_IF_ERROR(_scan_node->close(state));
     }
+    _fresh_exec_timer(_scan_node);
     return Operator::close(state);
 }
 

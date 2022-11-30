@@ -30,7 +30,6 @@ public:
     StreamingAggSourceOperator(OperatorBuilder*, vectorized::AggregationNode*,
                                std::shared_ptr<AggContext>);
     Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
     bool can_read() override;
     Status close(RuntimeState* state) override;
     Status get_block(RuntimeState*, vectorized::Block*, SourceState& source_state) override;

@@ -1090,10 +1090,6 @@ private:
     };
 
     MemoryRecord _mem_usage_record;
-
-    using child_return_rows_func = std::function<int64_t()>;
-    int64_t get_child_return_rows() { return _children[0]->rows_returned(); }
-    child_return_rows_func _child_return_rows;
 };
 } // namespace vectorized
 } // namespace doris

@@ -115,8 +115,8 @@ private:
     bool _need_wait_execution_trigger = false;
 
     MonotonicStopWatch _fragment_watcher;
-    RuntimeProfile::Counter* _start_timer;
-    RuntimeProfile::Counter* _prepare_timer;
+    //    RuntimeProfile::Counter* _start_timer;
+    //    RuntimeProfile::Counter* _prepare_timer;
 
 private:
     Status _create_sink(const TDataSink& t_data_sink);

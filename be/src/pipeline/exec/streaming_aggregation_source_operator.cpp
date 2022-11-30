@@ -31,10 +31,6 @@ Status StreamingAggSourceOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status StreamingAggSourceOperator::open(RuntimeState* state) {
-    return Status::OK();
-}
-
 bool StreamingAggSourceOperator::can_read() {
     return _agg_context->has_data_or_finished();
 }
@@ -51,7 +47,6 @@ Status StreamingAggSourceOperator::get_block(RuntimeState* state, vectorized::Bl
             RETURN_IF_ERROR(_agg_node->pull(state, block, &eos));
         } else {
             block->swap(*agg_block);
-            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
             agg_block->clear_column_data(_agg_node->row_desc().num_materialized_slots());
             _agg_context->return_free_block(std::move(agg_block));
         }
@@ -68,6 +63,7 @@ Status StreamingAggSourceOperator::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
+    _fresh_exec_timer(_agg_node);
     if (!_agg_node->decrease_ref()) {
         _agg_node->release_resource(state);
     }

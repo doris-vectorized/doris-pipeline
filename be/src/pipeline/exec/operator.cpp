@@ -20,10 +20,7 @@
 namespace doris::pipeline {
 
 Operator::Operator(OperatorBuilder* operator_builder)
-        : _operator_builder(operator_builder),
-          _num_rows_returned(0),
-          _limit(-1),
-          _is_closed(false) {}
+        : _operator_builder(operator_builder), _is_closed(false) {}
 
 bool Operator::is_sink() const {
     return _operator_builder->is_sink();
@@ -35,26 +32,9 @@ bool Operator::is_source() const {
 
 Status Operator::init(ExecNode* exec_node, RuntimeState* state) {
     _runtime_profile.reset(new RuntimeProfile(_operator_builder->get_name()));
-    _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
-    _rows_returned_rate = runtime_profile()->add_derived_counter(
-            ExecNode::ROW_THROUGHPUT_COUNTER, TUnit::UNIT_PER_SECOND,
-            std::bind<int64_t>(&RuntimeProfile::units_per_second, _rows_returned_counter,
-                               runtime_profile()->total_time_counter()),
-            "");
-    if (exec_node && exec_node->limit() >= 0) {
-        _limit = exec_node->limit();
+    if (exec_node) {
+        exec_node->runtime_profile()->insert_child_head(_runtime_profile.get(), true);
     }
-    return Status::OK();
-}
-
-Status Operator::link_profile(RuntimeProfile* parent) {
-    if (!_runtime_profile) {
-        return Status::InternalError("link profile error");
-    }
-    if (_child) {
-        RETURN_IF_ERROR(_child->link_profile(_runtime_profile.get()));
-    }
-    parent->add_child(_runtime_profile.get(), true, nullptr);
     return Status::OK();
 }
 
@@ -73,22 +53,16 @@ Status Operator::close(RuntimeState* state) {
         return Status::OK();
     }
     _is_closed = true;
-    if (_rows_returned_counter != nullptr) {
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    }
     return Status::OK();
-}
-
-void Operator::reached_limit(vectorized::Block* block, bool* eos) {
-    if (_limit != -1 and _num_rows_returned + block->rows() >= _limit) {
-        block->set_num_rows(_limit - _num_rows_returned);
-        *eos = true;
-    }
-    _num_rows_returned += block->rows();
 }
 
 const RowDescriptor& Operator::row_desc() {
     return _operator_builder->row_desc();
+}
+
+void Operator::_fresh_exec_timer(doris::ExecNode* node) {
+    node->_runtime_profile->total_time_counter()->update(
+            _runtime_profile->total_time_counter()->value());
 }
 
 std::string Operator::debug_string() const {

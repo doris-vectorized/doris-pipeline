@@ -27,9 +27,7 @@ namespace doris::pipeline {
 
 class ExchangeSourceOperator : public Operator {
 public:
-    explicit ExchangeSourceOperator(OperatorBuilder*);
-    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
+    explicit ExchangeSourceOperator(OperatorBuilder*, vectorized::VExchangeNode*);
     Status open(RuntimeState* state) override;
     bool can_read() override;
     Status get_block(RuntimeState* state, vectorized::Block* block,
@@ -48,7 +46,10 @@ public:
 
     bool is_source() const override { return true; }
 
-    OperatorPtr build_operator() override { return std::make_shared<ExchangeSourceOperator>(this); }
+    OperatorPtr build_operator() override {
+        return std::make_shared<ExchangeSourceOperator>(
+                this, reinterpret_cast<vectorized::VExchangeNode*>(_related_exec_node));
+    }
 };
 
 } // namespace doris::pipeline

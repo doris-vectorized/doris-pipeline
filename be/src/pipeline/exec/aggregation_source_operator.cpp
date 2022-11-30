@@ -26,19 +26,8 @@ AggregationSourceOperator::AggregationSourceOperator(OperatorBuilder* templ,
                                                      vectorized::AggregationNode* node)
         : Operator(templ), _agg_node(node) {}
 
-Status AggregationSourceOperator::init(ExecNode* exec_node, RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::init(exec_node, state));
-    return Status::OK();
-}
-
-// for poc
 Status AggregationSourceOperator::prepare(RuntimeState* state) {
     _agg_node->increase_ref();
-    return Status::OK();
-}
-
-// for poc
-Status AggregationSourceOperator::open(RuntimeState* state) {
     return Status::OK();
 }
 
@@ -48,6 +37,7 @@ bool AggregationSourceOperator::can_read() {
 
 Status AggregationSourceOperator::get_block(RuntimeState* state, vectorized::Block* block,
                                             SourceState& source_state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     bool eos = false;
     RETURN_IF_ERROR(_agg_node->pull(state, block, &eos));
     source_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
@@ -55,6 +45,7 @@ Status AggregationSourceOperator::get_block(RuntimeState* state, vectorized::Blo
 }
 
 Status AggregationSourceOperator::close(RuntimeState* state) {
+    _fresh_exec_timer(_agg_node);
     if (!_agg_node->decrease_ref()) {
         _agg_node->release_resource(state);
     }

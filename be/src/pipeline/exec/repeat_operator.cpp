@@ -26,21 +26,15 @@ RepeatOperator::RepeatOperator(RepeatOperatorBuilder* operator_builder,
                                vectorized::VRepeatNode* repeat_node)
         : Operator(operator_builder), _repeat_node(repeat_node) {}
 
-Status RepeatOperator::init(ExecNode* exec_node, RuntimeState* state) {
-    return Operator::init(exec_node, state);
-}
-
-Status RepeatOperator::prepare(RuntimeState* state) {
-    return Operator::prepare(state);
-}
-
 Status RepeatOperator::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(Operator::open(state));
     _child_block.reset(new vectorized::Block);
     return _repeat_node->alloc_resource(state);
 }
 
 Status RepeatOperator::close(RuntimeState* state) {
+    _fresh_exec_timer(_repeat_node);
     _repeat_node->release_resource(state);
     Operator::close(state);
     return Status::OK();
@@ -48,6 +42,7 @@ Status RepeatOperator::close(RuntimeState* state) {
 
 Status RepeatOperator::get_block(RuntimeState* state, vectorized::Block* block,
                                  SourceState& source_state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     if (_repeat_node->need_more_input_data()) {
         RETURN_IF_ERROR(_child->get_block(state, _child_block.get(), _child_source_state));
         source_state = _child_source_state;
