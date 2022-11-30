@@ -17,6 +17,8 @@
 
 #include "pipeline_fragment_context.h"
 
+#include <thrift/protocol/TDebugProtocol.h>
+
 #include "exec/agg_context.h"
 #include "exec/aggregation_sink_operator.h"
 #include "exec/aggregation_source_operator.h"
@@ -34,13 +36,13 @@
 #include "exec/streaming_aggregation_source_operator.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "pipeline/exec/table_function_operator.h"
 #include "pipeline_task.h"
 #include "runtime/client_cache.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/runtime_state.h"
 #include "task_scheduler.h"
 #include "util/container_util.hpp"
-#include "util/thrift_util.h"
 #include "vec/exec/scan/new_file_scan_node.h"
 #include "vec/exec/scan/new_olap_scan_node.h"
 #include "vec/exec/scan/vscan_node.h"
@@ -343,6 +345,14 @@ Status PipelineFragmentContext::_build_pipelines(ExecNode* node, PipelinePtr cur
         RETURN_IF_ERROR(_build_pipelines(node->child(0), cur_pipe));
         OperatorBuilderPtr builder =
                 std::make_shared<RepeatOperatorBuilder>(next_operator_builder_id(), repeat_node);
+        RETURN_IF_ERROR(cur_pipe->add_operator(builder));
+        break;
+    }
+    case TPlanNodeType::TABLE_FUNCTION_NODE: {
+        auto* repeat_node = assert_cast<vectorized::VTableFunctionNode*>(node);
+        RETURN_IF_ERROR(_build_pipelines(node->child(0), cur_pipe));
+        OperatorBuilderPtr builder = std::make_shared<TableFunctionOperatorBuilder>(
+                next_operator_builder_id(), repeat_node);
         RETURN_IF_ERROR(cur_pipe->add_operator(builder));
         break;
     }

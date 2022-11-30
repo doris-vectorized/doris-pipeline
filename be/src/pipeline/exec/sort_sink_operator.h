@@ -42,7 +42,7 @@ public:
     // return can write continue
     Status sink(RuntimeState* state, vectorized::Block* block, SourceState source_state) override;
 
-    Status finalize(RuntimeState* state) override { return Status::OK(); }
+    Status finalize(RuntimeState* /*state*/) override { return Status::OK(); }
 
     bool can_write() override { return true; };
 
