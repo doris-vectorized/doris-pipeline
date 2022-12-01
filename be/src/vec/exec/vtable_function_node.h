@@ -50,10 +50,7 @@ public:
 
     Status pull(RuntimeState* state, vectorized::Block* output_block, bool* eos) override {
         RETURN_IF_ERROR(get_expanded_block(state, output_block, eos));
-
         reached_limit(output_block, eos);
-
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
         return Status::OK();
     }
 

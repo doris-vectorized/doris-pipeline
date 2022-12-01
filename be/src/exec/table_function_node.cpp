@@ -17,6 +17,7 @@
 
 #include "exec/table_function_node.h"
 
+#include "exec/exec_node.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/table_function/table_function_factory.h"
@@ -105,6 +106,8 @@ Status TableFunctionNode::alloc_resource(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
     SCOPED_CONSUME_MEM_TRACKER(mem_tracker());
+
+    ExecNode::alloc_resource(state);
 
     RETURN_IF_ERROR(Expr::open(_fn_ctxs, state));
     RETURN_IF_ERROR(vectorized::VExpr::open(_vfn_ctxs, state));
