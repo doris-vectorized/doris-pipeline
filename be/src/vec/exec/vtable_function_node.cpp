@@ -122,19 +122,8 @@ Status VTableFunctionNode::get_expanded_block(RuntimeState* state, Block* output
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(state->check_query_state("VTableFunctionNode, while getting next batch."));
 
-        // if child_block is empty, get data from child.
-        if (need_more_input_data()) {
-            while (_child_block->rows() == 0 && !_child_eos) {
-                RETURN_IF_ERROR_AND_CHECK_SPAN(
-                        child(0)->get_next_after_projects(state, _child_block.get(), &_child_eos),
-                        child(0)->get_next_span(), _child_eos);
-            }
-            if (_child_eos && _child_block->rows() == 0) {
-                *eos = true;
-                break;
-            }
-
-            push(state, _child_block.get(), *eos);
+        if(_child_block->rows()==0){
+            break;
         }
 
         bool skip_child_row = false;
