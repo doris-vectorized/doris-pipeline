@@ -31,10 +31,6 @@ class RepeatOperator : public Operator {
 public:
     RepeatOperator(RepeatOperatorBuilder* operator_builder, vectorized::VRepeatNode* repeat_node);
 
-    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
-
-    Status prepare(RuntimeState* state) override;
-
     Status open(RuntimeState* state) override;
 
     Status close(RuntimeState* state) override;

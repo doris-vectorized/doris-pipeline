@@ -23,22 +23,12 @@
 
 namespace doris::pipeline {
 
-ExchangeSourceOperator::ExchangeSourceOperator(OperatorBuilder* operator_builder)
-        : Operator(operator_builder) {}
-
-Status ExchangeSourceOperator::init(ExecNode* exec_node, RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::init(exec_node, state));
-    _exchange_node = assert_cast<vectorized::VExchangeNode*>(exec_node);
-    return Status::OK();
-}
-
-Status ExchangeSourceOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::prepare(state));
-    _exchange_node->_rows_returned_counter = _rows_returned_counter;
-    return Status::OK();
-}
+ExchangeSourceOperator::ExchangeSourceOperator(OperatorBuilder* operator_builder,
+                                               vectorized::VExchangeNode* node)
+        : Operator(operator_builder), _exchange_node(node) {}
 
 Status ExchangeSourceOperator::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     return _exchange_node->alloc_resource(state);
 }
 
@@ -52,9 +42,6 @@ Status ExchangeSourceOperator::get_block(RuntimeState* state, vectorized::Block*
     bool eos = false;
     auto st = _exchange_node->get_next(state, block, &eos);
     source_state = eos ? SourceState::FINISHED : SourceState::DEPEND_ON_SOURCE;
-    if (block) {
-        _num_rows_returned += block->rows();
-    }
     return st;
 }
 
@@ -67,6 +54,7 @@ Status ExchangeSourceOperator::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
+    _fresh_exec_timer(_exchange_node);
     _exchange_node->release_resource(state);
 
     return Operator::close(state);

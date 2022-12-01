@@ -34,8 +34,8 @@ public:
     StreamingAggSinkOperator(StreamingAggSinkOperatorBuilder* operator_builder,
                              vectorized::AggregationNode*, std::shared_ptr<AggContext>);
 
-    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState*) override;
+
     Status open(RuntimeState* state) override;
 
     Status sink(RuntimeState* state, vectorized::Block* block, SourceState source_state) override;
@@ -50,7 +50,9 @@ private:
     vectorized::AggregationNode* _agg_node;
     vectorized::Block _preagg_block = vectorized::Block();
 
-    int64_t get_child_return_rows() { return _child->rows_returned(); }
+    RuntimeProfile::Counter* _queue_byte_size_counter;
+    RuntimeProfile::Counter* _queue_size_counter;
+
     std::shared_ptr<AggContext> _agg_context;
 };
 

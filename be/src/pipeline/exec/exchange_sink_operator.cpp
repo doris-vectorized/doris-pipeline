@@ -55,11 +55,14 @@ Status ExchangeSinkOperator::init(const TDataSink& tsink) {
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_sink->prepare(state));
+    _sink->profile()->add_child(_runtime_profile.get(), true, nullptr);
+
     _sink->registe_channels(_sink_buffer.get());
     return Status::OK();
 }
 
 Status ExchangeSinkOperator::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(_sink->open(state));
     return Status::OK();
 }
@@ -77,13 +80,7 @@ Status ExchangeSinkOperator::finalize(RuntimeState* state) {
 Status ExchangeSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
                                   SourceState source_state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-
     RETURN_IF_ERROR(_sink->send(state, block, source_state == SourceState::FINISHED));
-
-    if (block) {
-        _num_rows_returned += block->rows();
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    }
     return Status::OK();
 }
 

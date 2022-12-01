@@ -110,11 +110,11 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
     if (_prepared) {
         return Status::InternalError("Already prepared");
     }
-    _runtime_profile.reset(new RuntimeProfile("PipelineContext"));
-    _start_timer = ADD_TIMER(_runtime_profile, "StartTime");
-    COUNTER_UPDATE(_start_timer, _fragment_watcher.elapsed_time());
-    _prepare_timer = ADD_TIMER(_runtime_profile, "PrepareTime");
-    SCOPED_TIMER(_prepare_timer);
+    //    _runtime_profile.reset(new RuntimeProfile("PipelineContext"));
+    //    _start_timer = ADD_TIMER(_runtime_profile, "StartTime");
+    //    COUNTER_UPDATE(_start_timer, _fragment_watcher.elapsed_time());
+    //    _prepare_timer = ADD_TIMER(_runtime_profile, "PrepareTime");
+    //    SCOPED_TIMER(_prepare_timer);
 
     auto* fragment_context = this;
     OpentelemetryTracer tracer = telemetry::get_noop_tracer();
@@ -170,7 +170,6 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
         fragment_context->set_is_report_success(request.query_options.is_report_success);
     }
 
-    RETURN_IF_ERROR(_runtime_state->create_block_mgr());
     auto* desc_tbl = _query_ctx->desc_tbl;
     _runtime_state->set_desc_tbl(desc_tbl);
 
@@ -240,13 +239,9 @@ Status PipelineFragmentContext::prepare(const doris::TExecPlanFragmentParams& re
         RETURN_IF_ERROR(_create_sink(request.fragment.output_sink));
     }
     RETURN_IF_ERROR(_build_pipeline_tasks(request));
+    _runtime_state->runtime_profile()->add_child(_sink->profile(), true, nullptr);
+    _runtime_state->runtime_profile()->add_child(_root_plan->runtime_profile(), true, nullptr);
 
-    for (auto& pipeline : _pipelines) {
-        _runtime_profile->add_child(pipeline->runtime_profile(), true, nullptr);
-    }
-    // TODO pipeline don't generate exec node's profiles
-    _runtime_state->runtime_profile()->clear_children();
-    _runtime_state->runtime_profile()->add_child(_runtime_profile.get(), true, nullptr);
     _prepared = true;
     return Status::OK();
 }
@@ -395,7 +390,7 @@ Status PipelineFragmentContext::_create_sink(const TDataSink& thrift_sink) {
 void PipelineFragmentContext::close_a_pipeline() {
     ++_closed_pipeline_cnt;
     if (_closed_pipeline_cnt == _pipelines.size()) {
-        _runtime_profile->total_time_counter()->update(_fragment_watcher.elapsed_time());
+        //        _runtime_profile->total_time_counter()->update(_fragment_watcher.elapsed_time());
         send_report(true);
         _exec_env->fragment_mgr()->remove_pipeline_context(shared_from_this());
     }

@@ -29,9 +29,7 @@ namespace pipeline {
 class AggregationSourceOperator : public Operator {
 public:
     AggregationSourceOperator(OperatorBuilder*, vectorized::AggregationNode*);
-    Status init(ExecNode* exec_node, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
     bool can_read() override;
     Status close(RuntimeState* state) override;
     Status get_block(RuntimeState*, vectorized::Block*, SourceState&) override;

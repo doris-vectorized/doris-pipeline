@@ -448,7 +448,6 @@ Status AggregationNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     SCOPED_CONSUME_MEM_TRACKER(mem_tracker());
     RETURN_IF_ERROR(prepare_profile(state));
-    _child_return_rows = std::bind<int64_t>(&AggregationNode::get_child_return_rows, this);
     return Status::OK();
 }
 
@@ -627,7 +626,7 @@ Status AggregationNode::_get_without_key_result(RuntimeState* state, Block* bloc
             ColumnPtr ptr = std::move(columns[i]);
             // unless `count`, other aggregate function dispose empty set should be null
             // so here check the children row return
-            ptr = make_nullable(ptr, _child_return_rows() == 0);
+            ptr = make_nullable(ptr, _children[0]->rows_returned() == 0);
             columns[i] = std::move(*ptr).mutate();
         }
     }
@@ -642,7 +641,7 @@ Status AggregationNode::_serialize_without_key(RuntimeState* state, Block* block
     // in level two aggregation node should return NULL result
     //    level one aggregation node set `eos = true` return directly
     SCOPED_TIMER(_serialize_result_timer);
-    if (UNLIKELY(_child_return_rows() == 0)) {
+    if (UNLIKELY(_children[0]->rows_returned() == 0)) {
         *eos = true;
         return Status::OK();
     }
@@ -790,7 +789,7 @@ bool AggregationNode::_should_expand_preagg_hash_tables() {
                 // Compare the number of rows in the hash table with the number of input rows that
                 // were aggregated into it. Exclude passed through rows from this calculation since
                 // they were not in hash tables.
-                const int64_t input_rows = _child_return_rows();
+                const int64_t input_rows = _children[0]->rows_returned();
                 const int64_t aggregated_input_rows = input_rows - _num_rows_returned;
                 // TODO chenhao
                 //  const int64_t expected_input_rows = estimated_input_cardinality_ - num_rows_returned_;

@@ -35,6 +35,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
 }
 
 Status ResultSinkOperator::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     return _sink->open(state);
 }
 
@@ -49,9 +50,6 @@ Status ResultSinkOperator::sink(RuntimeState* state, vectorized::Block* block,
         DCHECK(source_state == SourceState::FINISHED)
                 << "block is null, eos should invoke in finalize.";
         return Status::OK();
-    } else {
-        _num_rows_returned += block->rows();
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
     return _sink->send(state, block);
 }
@@ -61,6 +59,7 @@ Status ResultSinkOperator::finalize(RuntimeState* state) {
     return _sink->close(state, Status::OK());
 }
 
+// TODO: Support fresh exec time for sink
 Status ResultSinkOperator::close(RuntimeState* state) {
     if (!_finalized) {
         RETURN_IF_ERROR(_sink->close(state, Status::InternalError("Not finalized")));

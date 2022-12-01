@@ -26,19 +26,16 @@ StreamingAggSinkOperator::StreamingAggSinkOperator(
         std::shared_ptr<AggContext> agg_context)
         : Operator(operator_builder), _agg_node(agg_node), _agg_context(std::move(agg_context)) {}
 
-Status StreamingAggSinkOperator::init(ExecNode* exec_node, RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::init(exec_node, state));
-    return Status::OK();
-}
-
 Status StreamingAggSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    _agg_node->_child_return_rows =
-            std::bind<int64_t>(&StreamingAggSinkOperator::get_child_return_rows, this);
+    _queue_byte_size_counter =
+            ADD_COUNTER(_runtime_profile.get(), "MaxSizeInBlockQueue", TUnit::BYTES);
+    _queue_size_counter = ADD_COUNTER(_runtime_profile.get(), "MaxSizeOfBlockQueue", TUnit::UNIT);
     return Status::OK();
 }
 
 Status StreamingAggSinkOperator::open(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(Operator::open(state));
     RETURN_IF_ERROR(_agg_node->alloc_resource(state));
     return Status::OK();
@@ -70,11 +67,13 @@ Status StreamingAggSinkOperator::sink(RuntimeState* state, vectorized::Block* in
 }
 
 Status StreamingAggSinkOperator::close(RuntimeState* state) {
-    // for poc
+    _fresh_exec_timer(_agg_node);
     if (_agg_context && !_agg_context->is_finish()) {
         // finish should be set, if not set here means error.
         _agg_context->set_canceled();
     }
+    COUNTER_SET(_queue_size_counter, _agg_context->max_size_of_queue());
+    COUNTER_SET(_queue_byte_size_counter, _agg_context->max_bytes_in_queue());
     return Status::OK();
 }
 
