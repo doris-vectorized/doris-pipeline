@@ -36,7 +36,7 @@ Status SortSinkOperator::open(doris::RuntimeState* state) {
     return Status::OK();
 }
 
-Status SortSinkOperator::close(doris::RuntimeState*  /*state*/) {
+Status SortSinkOperator::close(doris::RuntimeState* /*state*/) {
     _fresh_exec_timer(_sort_node);
     return Status::OK();
 }
